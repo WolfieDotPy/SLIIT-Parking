@@ -9,6 +9,9 @@ const storage=process.env.SUPABASE_URL&&process.env.SUPABASE_SERVICE_ROLE_KEY?cr
 const app=express(),PUB=path.join(__dirname,'public'),SECRET=process.env.JWT_SECRET;
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:5*1024*1024},fileFilter:(_q,f,cb)=>cb(null,['image/jpeg','image/png','application/pdf'].includes(f.mimetype))});
 app.disable('x-powered-by');app.use(express.json({limit:'1mb'}));app.use(express.urlencoded({extended:true}));app.use(express.static(PUB,{index:false,maxAge:'1h'}));
+app.get('/student/',(_q,s)=>s.sendFile(path.join(PUB,'student','index.html')));
+app.get('/admin/',(_q,s)=>s.sendFile(path.join(PUB,'admin','index.html')));
+app.get('/enforcer/',(_q,s)=>s.sendFile(path.join(PUB,'enforcer','index.html')));
 const fail=(m,c=400)=>{const e=new Error(m);e.status=c;throw e};
 const wrap=fn=>async(q,s,n)=>{try{await fn(q,s,n)}catch(e){console.error('[request]',q.method,q.path,e);if(!s.headersSent)s.status(e.status||500).json({error:e.status?e.message:'Internal server error'})}};
 const query=(sql,params=[],client=pool)=>client.query(sql,params);
