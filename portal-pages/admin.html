@@ -50,8 +50,23 @@ function drawT(){const user=TB==='students'||TB==='enforcers',day=n=>new Date(Da
  $('#grant').innerHTML=(TB==='passes'?`<div class="row" style="cursor:default;flex-wrap:wrap"><b>Grant a pass</b><input id="gc" placeholder="Student ID" style="width:140px"><input id="gs" type="date" value="${day(0)}" style="width:150px"><input id="ge" type="date" value="${day(365)}" style="width:150px"><button class="pill green" onclick="grant()">Add pass</button></div>`:'')+bulk();
  const head='<tr>'+COLS.map(c=>'<th>'+esc(c)+'</th>').join('')+'<th>Actions</th></tr>';
  const body=TR.map(r=>r.id===EDIT?'<tr>'+COLS.map(c=>EC.includes(c)?`<td><input data-c="${c}" value="${esc(r[c])}" style="padding:5px 9px;font-size:12px;min-width:95px"></td>`:'<td>'+esc(r[c])+'</td>').join('')+`<td style="white-space:nowrap">${user?'<input data-c="new_password" type="password" placeholder="New password" style="padding:5px 9px;font-size:12px;width:120px"> ':''}<button class="pill green" onclick="saveR(${r.id})">Save</button> <button class="pill" onclick="EDIT=null;drawT()">Cancel</button></td></tr>`
-  :'<tr>'+COLS.map(c=>'<td>'+esc(r[c])+'</td>').join('')+`<td style="white-space:nowrap"><button class="pill" onclick="EDIT=${r.id};drawT()">Edit</button> <button class="pill red" onclick="delR(${r.id})">Delete</button></td></tr>`).join('');
+  :'<tr>'+COLS.map(c=>'<td>'+esc(r[c])+'</td>').join('')+`<td style="white-space:nowrap"><button class="pill" onclick="EDIT=${r.id};drawT()">Edit</button> ${user?'<button class="pill green" onclick="loginAs('+r.id+')">Login</button> ':''}<button class="pill red" onclick="delR(${r.id})">Delete</button></td></tr>`).join('');
  $('#dv').innerHTML=TR.length?`<table><thead>${head}</thead><tbody>${body}</tbody></table>`:'<p class="small">No rows yet.</p>';filt()}
+async function loginAs(id){
+ const role=TB==='students'?'student':TB==='enforcers'?'enforcer':null;
+ const row=TR.find(r=>Number(r.id)===Number(id));
+ if(!role||!row)return toast('Select a student or enforcer account first',1);
+ const tab=window.open('about:blank','_blank');
+ if(!tab)return toast('Please allow pop-ups to open the portal in a new tab',1);
+ try{
+  const result=await api('/api/admin/impersonation/'+role+'/'+id,{method:'POST',json:{}});
+  const host=location.hostname,local=host==='localhost'||host==='127.0.0.1',preview=host.endsWith('.vercel.app')&&host!=='sliit-parking-admin.vercel.app';
+  const base=local||preview?location.origin+'/'+role+'/':role==='student'?'https://sliit-parking-beta.vercel.app/student/':'https://sliit-parking-enforcer.vercel.app/enforcer/';
+  const url=new URL(base);url.hash='admin-token='+encodeURIComponent(result.token);
+  tab.location.href=url.toString();
+  toast('Opening '+row.code+' in the '+role+' portal');
+ }catch(error){tab.close();toast(error.message,1)}
+}
 async function saveR(id){const d={};$$('#dv [data-c]').forEach(i=>{if(i.dataset.c!=='new_password'||i.value)d[i.dataset.c]=i.value});
  try{await api(`/api/admin/table/${TB}/${id}`,{method:'PUT',json:d});toast('Saved');showT(TB)}catch(x){toast(x.message,1)}}
 async function delR(id){if(!confirm(TB==='students'?'Delete this student and their vehicle, passes and payments? This cannot be undone.':'Delete this row? This cannot be undone.'))return;
