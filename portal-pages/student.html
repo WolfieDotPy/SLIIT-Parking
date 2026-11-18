@@ -51,14 +51,50 @@ async function buildPass(qrUrl,active){
  const tw=x.measureText('VEHICLE PASS').width;if(tw>650){fs=Math.floor(fs*650/tw);x.font='800 '+fs+'px Poppins,Arial Black,Arial,sans-serif'}
  x.fillText('VEHICLE PASS',W/2,by+bs+34+fs*0.9);
  return c.toDataURL('image/png')}
-function dlPass(){const a=document.createElement('a');a.href=PASSURL;a.download='SLIIT-Vehicle-Pass-'+ME.code+'.png';document.body.append(a);a.click();a.remove()}
+async function dlPassPdf(){
+ try{
+  const img=await loadImg(PASSURL);if(!img)throw new Error('Could not prepare the pass image');
+  const w=img.naturalWidth,h=img.naturalHeight,cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0);
+  const rgba=cx.getImageData(0,0,w,h).data,rgb=new Uint8Array(w*h*3);
+  for(let s=0,d=0;s<rgba.length;s+=4){rgb[d++]=rgba[s];rgb[d++]=rgba[s+1];rgb[d++]=rgba[s+2]}
+  if(!('CompressionStream'in window))throw new Error('This browser does not support PDF compression. Please use a recent version of Chrome, Edge or Firefox.');
+  const cs=new CompressionStream('deflate'),writer=cs.writable.getWriter();writer.write(rgb);writer.close();
+  const pixels=new Uint8Array(await new Response(cs.readable).arrayBuffer());
+  const enc=new TextEncoder(),parts=[],offsets=[0];let length=0;
+  const push=part=>{parts.push(part);length+=part.length};
+  const ascii=s=>enc.encode(s);
+  push(ascii('%PDF-1.4\n%SLIIT\n'));
+  const obj=(n,body)=>{offsets[n]=length;push(ascii(n+' 0 obj\n'+body+'\nendobj\n'))};
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+  offsets[4]=length;push(ascii('4 0 obj\n<< /Type /XObject /Subtype /Image /Width '+w+' /Height '+h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length '+pixels.length+' >>\nstream\n'));push(pixels);push(ascii('\nendstream\nendobj\n'));
+  const pageW=595.28,pageH=841.89,margin=28.35,gap=14.17,cellW=(pageW-2*margin-gap)/2,cellH=(pageH-2*margin-gap)/2;
+  let ops='q\n0.78 G 0.65 w\n';
+  for(let row=0;row<2;row++)for(let col=0;col<2;col++){
+   const x=margin+col*(cellW+gap),y=margin+row*(cellH+gap),inset=12;
+   ops+=x.toFixed(2)+' '+y.toFixed(2)+' '+cellW.toFixed(2)+' '+cellH.toFixed(2)+' re S\n';
+   const maxW=cellW-inset*2,maxH=cellH-inset*2,scale=Math.min(maxW/w,maxH/h),iw=w*scale,ih=h*scale,ix=x+(cellW-iw)/2,iy=y+(cellH-ih)/2;
+   ops+='q '+iw.toFixed(3)+' 0 0 '+ih.toFixed(3)+' '+ix.toFixed(3)+' '+iy.toFixed(3)+' cm /Im0 Do Q\n';
+  }
+  ops+='Q';
+  const stream=ascii(ops);
+  offsets[5]=length;push(ascii('5 0 obj\n<< /Length '+stream.length+' >>\nstream\n'));push(stream);push(ascii('\nendstream\nendobj\n'));
+  const xref=length;let table='xref\n0 6\n0000000000 65535 f \n';
+  for(let n=1;n<=5;n++)table+=String(offsets[n]).padStart(10,'0')+' 00000 n \n';
+  push(ascii(table+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF'));
+  const pdf=new Blob(parts,{type:'application/pdf'}),url=URL.createObjectURL(pdf),a=document.createElement('a');
+  a.href=url;a.download='SLIIT-Vehicle-Pass-'+ME.code+'.pdf';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }catch(e){toast(e.message||'Could not create the PDF',1)}
+}
 async function home(){ME=await api('/api/student/me');const od=ME.overdue;
  $('#who').innerHTML=`<div class="avatar">${esc(ME.name[0])}</div><div><b>${esc(ME.name)}</b><small>${esc(ME.code)}</small></div>`;
  $('#kv').innerHTML=kv([['Student Name',ME.name],['Contact',ME.contact],['Overdue Fees',od.n?money(od.total)+' ('+od.n+' fee'+(od.n>1?'s':'')+')':'None',od.n?'bad':'ok']],'one');
  const {qr}=await api('/api/student/qr'),act=ME.status==='ACTIVE',
   lb=act?['Active','ok']:ME.status==='EXPIRED'?['Expired','bad']:ME.pendingPass?['Pending approval','warn']:['Inactive','bad'];
  PASSURL=await buildPass(qr,act);
- let h=`<div class="glass pass"><div class="passcol"><img class="passimg" src="${PASSURL}" alt="Vehicle pass QR code"><button class="pill block" onclick="dlPass()">Download QR</button></div>`+kv([['Status',lb[0],lb[1]],['Student ID',ME.code],['Vehicle No',ME.reg],['Vehicle Type',ME.type],['Pass Validity',fmtD(ME.expiry)]])+'</div>';
+ let h=`<div class="glass pass"><div class="passcol"><img class="passimg" src="${PASSURL}" alt="Vehicle pass QR code"><button class="pill block" onclick="dlPassPdf()">Download Pass PDF</button></div>`+kv([['Status',lb[0],lb[1]],['Student ID',ME.code],['Vehicle No',ME.reg],['Vehicle Type',ME.type],['Pass Validity',fmtD(ME.expiry)]])+'</div>';
  if(ME.pendingPass)h+='<p class="center warn small">Your payment slip is awaiting verification. The QR code becomes active once the admin approves it.</p>';
  else if(!act)h+=`<p class="center bad small">${ME.lastPass&&ME.lastPass.status==='rejected'?'Your last payment was rejected: '+esc(ME.lastPass.reject_reason)+'. ':''}${ME.status==='EXPIRED'?'Your pass has expired. ':'Your QR code is inactive. '}Tap <b>Pay Fees</b>, choose <b>Vehicle Pass</b> and upload your payment slip to activate it.</p>`;
  $('#passbox').innerHTML=h;show('dash')}
