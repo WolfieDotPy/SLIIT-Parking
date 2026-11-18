@@ -1,0 +1,27 @@
+name: Production smoke tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Optional deployment URL (defaults to production)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run read-only smoke tests
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://sliit-parking-beta.vercel.app' }}
+        run: npm run test:smoke
