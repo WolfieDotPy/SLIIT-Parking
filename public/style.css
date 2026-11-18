@@ -6,25 +6,19 @@ body.mobile{background:radial-gradient(circle at 15% 8%,#7db4ff,transparent 45%)
 /* Scale the desktop experience substantially on wide displays. */
 @media(min-width:961px){
   .wrap,.mobile .wrap{width:min(80vw,1800px);max-width:none;padding:38px 30px}
-  body{font-size:clamp(18px,1.2vw,23px)}
   h1{font-size:clamp(42px,2.8vw,56px);margin:10px 0;letter-spacing:.7px}
   h3{font-size:clamp(23px,1.55vw,30px);margin:8px 0 14px}
   .glass{padding:clamp(26px,2vw,38px);margin-bottom:24px;border-radius:22px}
   .grid2{gap:0 28px}
   .grid3,.split{gap:24px}
-  .sub{font-size:clamp(17px,1.05vw,20px);margin-bottom:18px}
-  label{font-size:clamp(16px,.95vw,19px);margin:17px 0 7px}
-  input,select{font-size:clamp(17px,1.05vw,20px);padding:15px 19px}
-  .pill{font-size:clamp(17px,1.05vw,20px);padding:14px 30px}
-  .small{font-size:15px}
-  small{font-size:14px}
+  label{margin:17px 0 7px}
+  input,select{padding:15px 19px}
+  .pill{padding:14px 30px}
   .kv2{gap:18px 24px}
-  .kv2 b{font-size:clamp(18px,1.15vw,22px)}
   .tabs{padding:5px;margin-bottom:17px}
-  .tabs button{font-size:17px;padding:11px}
-  .row{font-size:17px;padding:16px 18px;margin-bottom:12px;border-radius:14px}
-  .tag{font-size:14px;padding:4px 11px}
-  table{font-size:17px}
+  .tabs button{padding:11px}
+  .row{padding:16px 18px;margin-bottom:12px;border-radius:14px}
+  .tag{padding:4px 11px}
   th,td{padding:12px}
   .pass img.qr{width:190px;height:190px}
   .scan{min-height:230px;padding:20px}
