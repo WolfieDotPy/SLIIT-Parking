@@ -162,3 +162,16 @@ body::before,body::after{transition:opacity .5s ease}
   :root[data-theme="dark"] .theme-toggle::before{content:"☀"}
   .toast{bottom:calc(78px + env(safe-area-inset-bottom,0px))}
 }
+
+
+/* Subtle centered copyright notice at the end of each portal. */
+.copyright-footer{
+  width:100%;
+  padding:18px 16px 22px;
+  text-align:center;
+  color:#7c83a6;
+  font-size:11px;
+  line-height:1.5;
+  letter-spacing:.02em;
+}
+:root[data-theme="dark"] .copyright-footer{color:#9299bd}
