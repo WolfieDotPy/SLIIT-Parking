@@ -384,12 +384,17 @@ const normReg = value => {
   return match ? `${match[1]}-${match[2]}` : text;
 };
 const normalCode = value => String(value || '').trim().toUpperCase().replace(/[\s-]/g, '');
-const dateOrNull = value => {
+const parseAdminDate = value => {
   if (value === undefined || value === null || value === '') return null;
-  const date = new Date(value);
+  const text = String(value).trim();
+  // Admin-entered date/time values without an explicit offset are Sri Lanka local time.
+  const hasTime = /^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}/.test(text);
+  const hasZone = /(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(text);
+  const date = new Date(hasTime && !hasZone ? text.replace(' ', 'T') + '+05:30' : text);
   if (Number.isNaN(date.getTime())) fail('Invalid date');
-  return date.toISOString();
+  return date;
 };
+const dateOrNull = value => parseAdminDate(value)?.toISOString() ?? null;
 
 async function settings(conn = null) {
   const rows = await all('SELECT key,value FROM settings', [], conn);
@@ -1081,8 +1086,8 @@ async function addFee(row, conn) {
   if (!REG_RE.test(reg)) fail(REG_MSG);
   const status = String(row.status || 'unpaid').toLowerCase();
   if (!['unpaid', 'paid'].includes(status)) fail('status must be unpaid or paid');
-  const start = row.start_time ? new Date(row.start_time) : null;
-  const end = row.end_time ? new Date(row.end_time) : null;
+  const start = row.start_time ? parseAdminDate(row.start_time) : null;
+  const end = row.end_time ? parseAdminDate(row.end_time) : null;
   if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) fail('start_time / end_time is not a valid date');
   let hours = row.hours === '' || row.hours == null ? null : Number(row.hours);
   let amount = row.amount === '' || row.amount == null ? null : Number(row.amount);
