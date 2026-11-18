@@ -43,8 +43,8 @@ for (const [name, base, marker] of [
 }
 
 for (const [name, base, paths] of [
-  ['student', STUDENT_URL, ['/api/student/me', '/api/student/payments']],
-  ['admin', ADMIN_URL, ['/api/admin/settings', '/api/admin/payments', '/api/admin/table/students']],
+  ['student', STUDENT_URL, ['/api/student/me', '/api/student/payments', '/api/student/support', '/api/student/support/unread']],
+  ['admin', ADMIN_URL, ['/api/admin/settings', '/api/admin/payments', '/api/admin/table/students', '/api/admin/support/unread', '/api/admin/support/conversations']],
   ['enforcer', ENFORCER_URL, ['/api/enforcer/me', '/api/enforcer/fees']],
 ]) {
   for (const path of paths) {
