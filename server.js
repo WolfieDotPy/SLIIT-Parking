@@ -813,6 +813,39 @@ app.post('/api/student/register', upload.single('slip'), wrap(async (req, res) =
   req._storedSlip = null;
   res.json({ ok: true });
 }));
+
+app.get('/api/student/support/unread', auth('student'), wrap(async (req, res) => {
+  if (req.user.impersonationId) return res.json({ unread: 0 });
+  const row = await get("SELECT COUNT(*) AS unread FROM support_messages m JOIN support_conversations c ON c.id=m.conversation_id WHERE c.student_id=? AND m.sender_role='admin' AND (c.student_last_read_at IS NULL OR m.created_at>c.student_last_read_at)", [req.user.id]);
+  res.json({ unread: Number(row?.unread || 0) });
+}));
+app.get('/api/student/support', auth('student'), wrap(async (req, res) => {
+  if (req.user.impersonationId) fail('Messaging is unavailable while viewing an account as an administrator', 403);
+  const conversation = await get('SELECT id,status FROM support_conversations WHERE student_id=?', [req.user.id]);
+  if (!conversation) return res.json({ conversation: null, messages: [] });
+  await run('UPDATE support_conversations SET student_last_read_at=? WHERE id=?', [new Date().toISOString(), conversation.id]);
+  const messages = await all("SELECT m.id,m.sender_role,m.body,m.created_at,COALESCE(u.name,'Admin') AS sender_name FROM support_messages m JOIN users u ON u.id=m.sender_user_id WHERE m.conversation_id=? ORDER BY m.id ASC LIMIT 300", [conversation.id]);
+  res.json({ conversation, messages });
+}));
+app.post('/api/student/support/messages', auth('student'), wrap(async (req, res) => {
+  if (req.user.impersonationId) fail('Messaging is unavailable while viewing an account as an administrator', 403);
+  const body = String(req.body?.body || '').trim();
+  if (!body) fail('Please enter a message');
+  if (body.length > 4000) fail('Messages must be 4,000 characters or fewer');
+  const now = new Date().toISOString();
+  const result = await transaction(async conn => {
+    let conversation = await get('SELECT id FROM support_conversations WHERE student_id=?', [req.user.id], conn);
+    if (!conversation) {
+      const id = await insert("INSERT INTO support_conversations(student_id,status,created_at,updated_at,student_last_read_at) VALUES(?,'open',?,?,?)", [req.user.id, now, now, now], conn);
+      conversation = { id };
+    }
+    const messageId = await insert("INSERT INTO support_messages(conversation_id,sender_user_id,sender_role,body,created_at) VALUES(?,?,'student',?,?)", [conversation.id, req.user.id, body, now], conn);
+    await run("UPDATE support_conversations SET status='open',updated_at=? WHERE id=?", [now, conversation.id], conn);
+    return { conversationId: conversation.id, messageId };
+  });
+  res.json({ ok: true, ...result });
+}));
+
 app.get('/api/student/me', auth('student'), wrap(async (req, res) => {
   const data = await profile(req.user.id);
   const pending = await get("SELECT 1 FROM payments WHERE user_id=? AND kind='pass' AND status='pending' LIMIT 1", [req.user.id]);
