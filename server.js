@@ -924,6 +924,41 @@ async function paymentRow(payment, conn = null) {
   };
 }
 
+
+app.get('/api/admin/support/unread', auth('admin'), wrap(async (_req, res) => {
+  const row = await get("SELECT COUNT(*) AS unread FROM support_messages m JOIN support_conversations c ON c.id=m.conversation_id WHERE m.sender_role='student' AND (c.admin_last_read_at IS NULL OR m.created_at>c.admin_last_read_at)");
+  res.json({ unread: Number(row?.unread || 0) });
+}));
+app.get('/api/admin/support/conversations', auth('admin'), wrap(async (_req, res) => {
+  const conversations = await all("SELECT c.id,c.status,c.updated_at,u.name AS student_name,u.code AS student_code,(SELECT m.body FROM support_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message,(SELECT m.sender_role FROM support_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_sender_role,(SELECT COUNT(*) FROM support_messages m WHERE m.conversation_id=c.id AND m.sender_role='student' AND (c.admin_last_read_at IS NULL OR m.created_at>c.admin_last_read_at)) AS unread_count FROM support_conversations c JOIN users u ON u.id=c.student_id ORDER BY (SELECT COUNT(*) FROM support_messages m WHERE m.conversation_id=c.id AND m.sender_role='student' AND (c.admin_last_read_at IS NULL OR m.created_at>c.admin_last_read_at)) DESC,c.updated_at DESC");
+  res.json(conversations.map(c => ({ ...c, unread_count: Number(c.unread_count || 0) })));
+}));
+app.get('/api/admin/support/conversations/:id', auth('admin'), wrap(async (req, res) => {
+  const conversation = await get('SELECT c.id,c.status,c.updated_at,c.student_id,u.name AS student_name,u.code AS student_code FROM support_conversations c JOIN users u ON u.id=c.student_id WHERE c.id=?', [req.params.id]);
+  if (!conversation) fail('Conversation not found', 404);
+  await run('UPDATE support_conversations SET admin_last_read_at=? WHERE id=?', [new Date().toISOString(), conversation.id]);
+  const messages = await all("SELECT m.id,m.sender_role,m.body,m.created_at,COALESCE(u.name,'Admin') AS sender_name FROM support_messages m JOIN users u ON u.id=m.sender_user_id WHERE m.conversation_id=? ORDER BY m.id ASC LIMIT 300", [conversation.id]);
+  res.json({ conversation, messages });
+}));
+app.post('/api/admin/support/conversations/:id/messages', auth('admin'), wrap(async (req, res) => {
+  const body = String(req.body?.body || '').trim();
+  if (!body) fail('Please enter a message');
+  if (body.length > 4000) fail('Messages must be 4,000 characters or fewer');
+  const conversation = await get('SELECT id FROM support_conversations WHERE id=?', [req.params.id]);
+  if (!conversation) fail('Conversation not found', 404);
+  const now = new Date().toISOString();
+  const messageId = await insert("INSERT INTO support_messages(conversation_id,sender_user_id,sender_role,body,created_at) VALUES(?,?,'admin',?,?)", [conversation.id, req.user.id, body, now]);
+  await run("UPDATE support_conversations SET status='open',updated_at=? WHERE id=?", [now, conversation.id]);
+  res.json({ ok: true, messageId });
+}));
+app.patch('/api/admin/support/conversations/:id/status', auth('admin'), wrap(async (req, res) => {
+  const status = String(req.body?.status || '');
+  if (!['open','resolved'].includes(status)) fail('Status must be open or resolved');
+  const result = await run('UPDATE support_conversations SET status=?,updated_at=? WHERE id=?', [status, new Date().toISOString(), req.params.id]);
+  if (!result.changes) fail('Conversation not found', 404);
+  res.json({ ok: true, status });
+}));
+
 app.get('/api/admin/payments', auth('admin'), wrap(async (req, res) => {
   const history = req.query.view === 'history';
   const kind = ['fee', 'pass'].includes(req.query.kind) ? req.query.kind : null;
