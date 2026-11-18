@@ -1,10 +1,11 @@
 {
   "name": "sliit-parking-system",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "dev": "node --watch server.js",
     "check": "node --check server.js",
     "test:smoke": "node --test tests/smoke.test.js"
   },

@@ -1,10 +1,14 @@
 name: Verify application
+
 on:
   pull_request:
   push:
     branches:
       - main
-      - feat/vercel-supabase-runtime
+
+permissions:
+  contents: read
+
 jobs:
   syntax:
     runs-on: ubuntu-latest
@@ -13,5 +17,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm install
+      - run: npm install --no-audit --no-fund
       - run: npm run check

@@ -1,16 +1,111 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SLIIT Parking · Admin</title><link rel="stylesheet" href="/style.css"></head><body><main class="wrap"><header class="bar"><b class="sp">SLIIT Parking · Admin</b><button class="pill" id="logout" hidden>Log out</button></header><section class="glass narrow" id="login"><h1>ADMIN LOGIN</h1><form id="loginForm"><label>Password</label><input id="password" type="password" required><button class="pill block">Log in</button></form></section><section id="app" hidden><div class="actions"><button class="pill" data-tab="payments">Payments</button><button class="pill" data-tab="students">Students</button><button class="pill" data-tab="enforcers">Enforcers</button><button class="pill" data-tab="fees">Fees</button><button class="pill" data-tab="settings">Settings</button></div><div class="glass" id="content"></div></section></main><script>
-const key='tk_admin',$=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(url,o={}){const h={Authorization:'Bearer '+localStorage[key]};if(o.body){h['Content-Type']='application/json';o.body=JSON.stringify(o.body)}const r=await fetch(url,{...o,headers:h}),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Request failed');return d}
-const err=e=>alert(e.message);
-$('#loginForm').onsubmit=async e=>{e.preventDefault();try{const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('#password').value})}),d=await r.json();if(!r.ok)throw Error(d.error);localStorage[key]=d.token;boot()}catch(x){err(x)}};
-$('#logout').onclick=()=>{localStorage.removeItem(key);location.reload()};
-document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>load(b.dataset.tab));
-async function boot(){try{await api('/api/admin/settings');$('#login').hidden=true;$('#app').hidden=false;$('#logout').hidden=false;load('payments')}catch{localStorage.removeItem(key)}}
-async function load(tab){try{if(tab==='payments'){const rows=await api('/api/admin/payments');$('#content').innerHTML='<h3>Pending payments</h3>'+rows.map(p=>'<article class="row"><b>'+esc(p.student?.name||p.vehicle_reg)+'</b><span>'+esc(p.kind)+'</span><span>'+esc(p.amount)+'/=</span><button class="pill" onclick="slip('+p.id+')">Slip</button><button class="pill green" onclick="decide('+p.id+',true)">Approve</button><button class="pill red" onclick="decide('+p.id+',false)">Reject</button></article>').join('')||'<p>No pending payments.</p>'}
-else if(tab==='settings'){const s=await api('/api/admin/settings');$('#content').innerHTML='<h3>Settings</h3><form id="settingsForm">'+['hourly_rate','pass_price','grace_minutes','plan_days'].map(k=>'<label>'+k.replaceAll('_',' ')+'</label><input name="'+k+'" type="number" min="0" value="'+esc(s[k])+'" required>').join('')+'<label>Bank information</label><textarea name="bank_info">'+esc(s.bank_info)+'</textarea><label>New admin password (optional)</label><input name="new_password" type="password" minlength="6"><button class="pill green">Save settings</button></form>';$('#settingsForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/admin/settings',{method:'PUT',body:Object.fromEntries(new FormData(e.target))});alert('Saved')}catch(x){err(x)}}}
-else if(tab==='enforcers'){$('#content').innerHTML='<h3>Create enforcer</h3><form id="enf"><label>Name</label><input name="name" required><label>Contact</label><input name="contact" required><label>Password</label><input name="password" type="password" minlength="6" required><label>Confirm password</label><input name="confirm" type="password" required><button class="pill green">Create enforcer</button></form>';$('#enf').onsubmit=async e=>{e.preventDefault();try{const r=await api('/api/admin/enforcers',{method:'POST',body:Object.fromEntries(new FormData(e.target))});alert('Created '+r.code);e.target.reset()}catch(x){err(x)}}}
-else{const r=await api('/api/admin/table/'+tab);$('#content').innerHTML='<h3>'+tab+'</h3><div style="overflow:auto"><table><thead><tr>'+r.cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+r.rows.map(row=>'<tr>'+r.cols.map(c=>'<td>'+esc(row[c])+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}}catch(e){err(e)}}
-window.decide=async(id,ok)=>{try{const reason=ok?'':(prompt('Reason for rejection')||'Rejected');await api('/api/admin/payments/'+id+'/'+(ok?'approve':'reject'),{method:'PATCH',body:{reason}});load('payments')}catch(e){err(e)}};
-window.slip=async id=>{try{const r=await fetch('/api/admin/slip/'+id,{headers:{Authorization:'Bearer '+localStorage[key]}});if(!r.ok)throw Error('Could not open slip');const u=URL.createObjectURL(await r.blob());window.open(u,'_blank')}catch(e){err(e)}};
-boot();
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet"><link rel="icon" href="/logo.png"><link rel="stylesheet" href="/style.css"><title>SLIIT Parking - Admin</title></head><body data-portal="admin"><div class="wrap">
+<section class="view" id="login"><form class="glass narrow" onsubmit="doLogin(event)"><h1>LOG IN</h1><p class="sub">To SLIIT Parking<br><b>Admin Portal</b></p><label>Password</label><input id="lp" type="password" required><br><button class="pill block">Log in</button></form></section>
+
+<section class="view hidden" id="dash"><div class="glass bar"><div class="avatar">A</div><div class="sp"><b>SLIIT Parking</b><small>ADMIN</small></div><button class="pill" onclick="loadDB()">Database</button><button class="pill" onclick="loadSet()">Settings</button><button class="pill" onclick="logout()">Log out</button></div>
+<div class="grid3"><div class="glass"><h3 class="center">Pending Payments</h3><div id="pt"></div><div id="pl"></div>
+<div id="acts" class="hidden actions" style="justify-content:center"><button class="pill" onclick="openSlip(LIST[SEL].id)">View Upload</button><button class="pill green" onclick="act('approve')">Approve</button><button class="pill red" onclick="act('reject')">Reject</button></div></div>
+<div><div class="glass"><h3 class="center">Student Details</h3><input id="ssq" placeholder="Search students: ID, name, vehicle..." oninput="srch('student')" autocomplete="off"><div id="ssr" style="margin-top:6px"></div><div id="sd" style="margin-top:10px"></div></div><button class="pill block" onclick="hist()">Payment History</button></div>
+<div><div class="glass"><h3 class="center">Enforcer Details</h3><input id="esq" placeholder="Search enforcers: ID, name..." oninput="srch('enforcer')" autocomplete="off"><div id="esr" style="margin-top:6px"></div><div id="ed" style="margin-top:10px"></div></div><button class="pill block" onclick="show('enf')">Register Enforcer</button></div></div></section>
+
+<section class="view hidden" id="history"><p><a href="#" onclick="dash();return false">&lsaquo; Back</a></p><div class="glass"><h3>Payment History</h3><div id="ht"></div><div id="hl"></div></div></section>
+
+<section class="view hidden" id="enf"><p><a href="#" onclick="dash();return false">&lsaquo; Back</a></p><form class="glass" id="ef" onsubmit="regEnf(event)"><h3 class="center">Enforcer Registration for SLIIT Parking</h3><div id="ernote"></div>
+<div class="grid2"><div><label>Enforcer Name</label><input name="name" required></div><div><label>Enforcer Contact Details</label><input name="contact" type="tel" required></div>
+<div><label>Login Password</label><input name="password" type="password" minlength="6" required></div><div><label>Login Password Confirmation</label><input name="confirm" type="password" required><div class="pwmsg small"></div></div></div><br><button class="pill green block">Register</button></form></section>
+
+<section class="view hidden" id="set"><p><a href="#" onclick="dash();return false">&lsaquo; Back</a></p><form class="glass" onsubmit="saveSet(event)"><h3>Settings</h3><div id="sf"></div><br><button class="pill green block">Save settings</button></form></section>
+
+<section class="view hidden" id="db"><p><a href="#" onclick="dash();return false">&lsaquo; Back</a></p><div class="glass"><h3>Database</h3><div id="dt"></div>
+<div class="actions" style="justify-content:flex-start"><button class="pill" onclick="csv()">Download this table (CSV)</button><button class="pill" onclick="backup()">Download full backup</button><button class="pill" onclick="$('#imp').click()">Import Excel / CSV file</button><input id="imp" type="file" accept=".xlsx,.xls,.csv,text/csv" class="hidden" onchange="importCSV(this)"></div><p class="small">Use Edit to change a row, Delete to remove it. Dates can be typed as 2027-07-05 or in full ISO form. To edit in Excel: download the CSV, change cells (keep the header row), save, then press Import. Every tab except Payments can add many rows from Excel using its template.</p>
+<div id="grant"></div><input id="dq" placeholder="Filter rows..." oninput="filt()"><br><br><div style="overflow:auto" id="dv"></div></div></section>
+</div><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script src="/common.js"></script><script>
+let LIST=[],SEL=null,KIND='',DB={};
+async function doLogin(e){e.preventDefault();try{const r=await api('/api/admin/login',{method:'POST',json:{password:$('#lp').value}});localStorage[K]=r.token;dash()}catch(x){toast(x.message,1)}}
+function dash(){show('dash');tabs('#pt',[['','All'],['fee','Fees'],['pass','Passes']],v=>{KIND=v;load()});KIND='';load()}
+async function load(){LIST=await api('/api/admin/payments?view=pending&kind='+KIND);SEL=null;draw();detail(null)}
+function draw(){$('#pl').innerHTML=LIST.map((p,i)=>`<div class="row ${SEL===i?'sel':''}" onclick="pick(${i})"><b>${esc(p.student.code)}</b><span class="tag ${p.kind}">${p.kind==='pass'?'Pass':'Fee'}</span><span class="sp small">${money(p.amount)}</span>&rsaquo;</div>`).join('')||'<p class="center small">No pending payments</p>';$('#acts').classList.toggle('hidden',SEL===null)}
+function pick(i){SEL=i;draw();detail(LIST[i])}
+const sKV=s=>kv([['Student ID',s.code],['Status',PASS[s.status][0],PASS[s.status][1]],['Vehicle No',s.reg],['Vehicle Type',s.type],['Pass Validity',fmtD(s.expiry)],['Contact',s.contact],['Student Name',s.name],['Overdue Fees',s.overdue.n?money(s.overdue.total):'None']]);
+const eKV=e=>kv([['Enforcer ID',e.code],['Enforcer Name',e.name],['Contact',e.contact],['Fee Count',e.count]]);
+function detail(p){const s=p&&p.student,e=p&&p.enforcer;
+ $('#sd').innerHTML=s?sKV(s):'<p class="small center">Select a payment, or search above, to see a student.</p>';
+ $('#ed').innerHTML=e?eKV(e):'<p class="small center">'+(p?'Vehicle pass payment - no enforcer involved.':'Select a fee payment, or search above, to see an enforcer.')+'</p>'}
+let ST,SR={};
+function srch(t){clearTimeout(ST);ST=setTimeout(async()=>{const q=$(t==='student'?'#ssq':'#esq').value.trim(),box=$(t==='student'?'#ssr':'#esr');if(!q){box.innerHTML='';return}
+ try{SR[t]=await api('/api/admin/search?type='+t+'&q='+encodeURIComponent(q));
+  box.innerHTML=SR[t].map((x,k)=>`<div class="row" onclick="pickS('${t}',${k})"><b>${esc(x.code)}</b><span class="sp small">${esc(x.name)}${x.reg?' - '+esc(x.reg):''}</span>&rsaquo;</div>`).join('')||'<p class="small center">No match found</p>'}catch(x){toast(x.message,1)}},250)}
+function pickS(t,k){const x=SR[t][k];$(t==='student'?'#ssr':'#esr').innerHTML='';if(t==='student')$('#sd').innerHTML=sKV(x);else $('#ed').innerHTML=eKV(x)}
+async function act(a){const p=LIST[SEL];let json;if(a==='reject'){const r=prompt('Reason for rejection?');if(!r)return;json={reason:r}}
+ try{await api(`/api/admin/payments/${p.id}/${a}`,{method:'PATCH',json});toast(a==='approve'?'Approved':'Rejected');load()}catch(x){toast(x.message,1)}}
+function hist(){show('history');tabs('#ht',[['','All'],['fee','Fees'],['pass','Passes']],loadH);loadH('')}
+async function loadH(k){const r=await api('/api/admin/payments?view=history&kind='+k);$('#hl').innerHTML=r.map(p=>`<div class="row" style="cursor:default"><b>${esc(p.student.code)}</b><span>${fmtD(p.created_at)}</span><span class="sp small">${p.kind==='pass'?'Pass':'Fee'} ${money(p.amount)}</span><a href="#" onclick="openSlip(${p.id});return false">View Upload</a>${st(p.status)}</div>`).join('')||'<p class="center small">Nothing here yet.</p>'}
+async function regEnf(e){e.preventDefault();try{const r=await api('/api/admin/enforcers',{method:'POST',json:Object.fromEntries(new FormData(e.target))});e.target.reset();$('#ernote').innerHTML=`<div class="glass center"><b class="ok">Enforcer registered</b><br>Enforcer ID: <b>${r.code}</b><br><span class="small">Give this ID and the password to the enforcer.</span></div>`}catch(x){toast(x.message,1)}}
+const LBL={hourly_rate:'Hourly parking rate (Rs)',pass_price:'Annual vehicle pass price (Rs)',grace_minutes:'Free grace period (minutes)',plan_days:'Pass length (days)',bank_info:'Bank details shown to students'};
+async function loadSet(){const c=await api('/api/admin/settings');$('#sf').innerHTML=Object.keys(LBL).map(k=>`<label>${LBL[k]}</label><input name="${k}" ${k==='bank_info'?'':'type="number" min="0"'} value="${esc(c[k])}">`).join('')+'<label>New admin password (leave empty to keep the current one)</label><input name="new_password" type="password" autocomplete="new-password">';show('set')}
+async function saveSet(e){e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(!d.new_password)delete d.new_password;try{await api('/api/admin/settings',{method:'PUT',json:d});toast('Settings saved');dash()}catch(x){toast(x.message,1)}}
+let TB='students',TR=[],COLS=[],EC=[],EDIT=null;
+function loadDB(){show('db');tabs('#dt',['students','enforcers','vehicles','passes','fees','payments'].map(k=>[k,k[0].toUpperCase()+k.slice(1)]),k=>{$('#dq').value='';showT(k)});$('#dq').value='';showT('students')}
+async function showT(k){TB=k;EDIT=null;$('#dq').placeholder='Search '+k+' (ID, name, vehicle, contact...)';const r=await api('/api/admin/table/'+k);TR=r.rows;COLS=r.cols;EC=r.editable;drawT()}
+function drawT(){const user=TB==='students'||TB==='enforcers',day=n=>new Date(Date.now()+n*864e5).toISOString().slice(0,10);
+ $('#grant').innerHTML=(TB==='passes'?`<div class="row" style="cursor:default;flex-wrap:wrap"><b>Grant a pass</b><input id="gc" placeholder="Student ID" style="width:140px"><input id="gs" type="date" value="${day(0)}" style="width:150px"><input id="ge" type="date" value="${day(365)}" style="width:150px"><button class="pill green" onclick="grant()">Add pass</button></div>`:'')+bulk();
+ const head='<tr>'+COLS.map(c=>'<th>'+esc(c)+'</th>').join('')+'<th>Actions</th></tr>';
+ const body=TR.map(r=>r.id===EDIT?'<tr>'+COLS.map(c=>EC.includes(c)?`<td><input data-c="${c}" value="${esc(r[c])}" style="padding:5px 9px;font-size:12px;min-width:95px"></td>`:'<td>'+esc(r[c])+'</td>').join('')+`<td style="white-space:nowrap">${user?'<input data-c="new_password" type="password" placeholder="New password" style="padding:5px 9px;font-size:12px;width:120px"> ':''}<button class="pill green" onclick="saveR(${r.id})">Save</button> <button class="pill" onclick="EDIT=null;drawT()">Cancel</button></td></tr>`
+  :'<tr>'+COLS.map(c=>'<td>'+esc(r[c])+'</td>').join('')+`<td style="white-space:nowrap"><button class="pill" onclick="EDIT=${r.id};drawT()">Edit</button> <button class="pill red" onclick="delR(${r.id})">Delete</button></td></tr>`).join('');
+ $('#dv').innerHTML=TR.length?`<table><thead>${head}</thead><tbody>${body}</tbody></table>`:'<p class="small">No rows yet.</p>';filt()}
+async function saveR(id){const d={};$$('#dv [data-c]').forEach(i=>{if(i.dataset.c!=='new_password'||i.value)d[i.dataset.c]=i.value});
+ try{await api(`/api/admin/table/${TB}/${id}`,{method:'PUT',json:d});toast('Saved');showT(TB)}catch(x){toast(x.message,1)}}
+async function delR(id){if(!confirm(TB==='students'?'Delete this student and their vehicle, passes and payments? This cannot be undone.':'Delete this row? This cannot be undone.'))return;
+ try{await api(`/api/admin/table/${TB}/${id}`,{method:'DELETE'});toast('Deleted');showT(TB)}catch(x){toast(x.message,1)}}
+async function grant(){try{await api('/api/admin/passes',{method:'POST',json:{code:$('#gc').value,start_date:$('#gs').value,end_date:$('#ge').value}});toast('Pass added');showT('passes')}catch(x){toast(x.message,1)}}
+function dl(b,n){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;a.click()}
+function csv(){const t=[COLS,...TR.map(r=>COLS.map(c=>r[c]))].map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\\r\\n');dl(new Blob(['\\ufeff'+t],{type:'text/csv'}),TB+'.csv')}
+async function backup(){const r=await fetch('/api/admin/backup',{headers:{Authorization:'Bearer '+localStorage[K]}});if(!r.ok)return toast('Backup failed',1);const type=r.headers.get('content-type')||'',name=type.includes('application/json')?'sliit-parking-backup.json':'sliit-parking-backup.db';dl(await r.blob(),name)}
+const EXTRA={students:['vehicle','vehicle_type','password','pass_end'],enforcers:['password'],vehicles:['student'],passes:['student'],fees:['enforcer']};
+const TPL={
+ students:{h:'code,name,contact,vehicle,vehicle_type,password,pass_end',r:'IT26123567,Example Student,0771234567,CCC-6767,Car,changeme1,2027-07-05',d:'columns: code, name, contact, vehicle, vehicle_type, password (blank = IT number), pass_end (optional, gives an active pass until that date).'},
+ enforcers:{h:'name,contact,password,code',r:'Example Enforcer,0771234567,secret123,',d:'columns: name, contact, password (min 6, required), code (optional - blank gives the next EN number).'},
+ vehicles:{h:'student,reg_number,type',r:'IT26123567,CCC-6767,Car',d:'columns: student (IT number, must exist), reg_number, type. One vehicle per student.'},
+ passes:{h:'student,start_date,end_date',r:'IT26123567,2026-07-05,2027-07-05',d:'columns: student (IT number, must exist), end_date (required), start_date (optional).'},
+ fees:{h:'vehicle_reg,amount,status,start_time,end_time,enforcer,reason',r:'CCC-6767,300,unpaid,2026-11-04 08:00,2026-11-04 11:00,EN001,',d:'columns: vehicle_reg, amount (or start_time+end_time to calculate it), status (unpaid/paid), enforcer (optional EN code).'}};
+function tpl(){const t=TPL[TB];dl(new Blob(['\\ufeff'+t.h+'\\r\\n'+t.r+'\\r\\n'],{type:'text/csv'}),'new-'+TB+'-template.csv')}
+const bulk=()=>TPL[TB]?`<div class="row" style="cursor:default;flex-wrap:wrap"><b>Add many ${TB} from Excel</b><span class="sp small">Download the template, replace the example row, leave id empty, save as .xlsx or .csv, then press Import. ${TPL[TB].d}</span><button class="pill" onclick="tpl()">Download template</button></div>`:'';
+function parseCSV(t,d=','){t=t.replace(/^\\ufeff/,'');const rows=[];let r=[],f='',q=false;
+ for(let i=0;i<t.length;i++){const c=t[i];
+  if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}
+  else if(c=='"')q=true;else if(c==d){r.push(f);f=''}
+  else if(c=='\\n'||c=='\\r'){if(c=='\\r'&&t[i+1]=='\\n')i++;r.push(f);rows.push(r);r=[];f=''}else f+=c}
+ if(f||r.length){r.push(f);rows.push(r)}return rows.filter(x=>x.some(v=>v!==''))}
+const ALIAS={student_id:'code',id_number:'code',student_id_number:'code',index_number:'code',index_no:'code',student_no:'code',it_number:'code',it_no:'code',registration_number:'code',student_registration_number:'code',student_number:'code',full_name:'name',student_name:'name',student_full_name:'name',contact_number:'contact',student_contact_number:'contact',contact_no:'contact',phone:'contact',phone_number:'contact',mobile:'contact',mobile_number:'contact',vehicle_number:'vehicle',vehicle_no:'vehicle',student_vehicle_number:'vehicle',vehicle_reg:'vehicle',vehicle_registration:'vehicle',vehicle_registration_number:'vehicle',number_plate:'vehicle',plate_number:'vehicle',student_vehicle_type:'vehicle_type',type:'vehicle_type',login_password:'password',pass_validity:'pass_end',pass_expiry:'pass_end',expiry:'pass_end',expiry_date:'pass_end',valid_until:'pass_end',validity:'pass_end',end_date:'pass_end',plan_expiry:'pass_end'};
+const A1={student_id:'student',it_number:'student',it_no:'student',student_number:'student',student_code:'student',registration_number:'student',student_registration_number:'student',id_number:'student',index_number:'student'};
+const ALIASES={students:ALIAS,
+ enforcers:{enforcer_id:'code',enforcer_code:'code',enforcer_no:'code',id_number:'code',enforcer_name:'name',full_name:'name',contact_number:'contact',phone:'contact',phone_number:'contact',mobile:'contact',mobile_number:'contact',contact_details:'contact',enforcer_contact_details:'contact',login_password:'password'},
+ vehicles:{...A1,vehicle_number:'reg_number',vehicle_no:'reg_number',vehicle_reg:'reg_number',registration:'reg_number',number_plate:'reg_number',plate_number:'reg_number',vehicle_type:'type'},
+ passes:{...A1,pass_end:'end_date',pass_expiry:'end_date',expiry:'end_date',expiry_date:'end_date',valid_until:'end_date',validity:'end_date',pass_validity:'end_date',pass_start:'start_date',valid_from:'start_date'},
+ fees:{vehicle_number:'vehicle_reg',vehicle_no:'vehicle_reg',reg_number:'vehicle_reg',number_plate:'vehicle_reg',fee:'amount',fee_amount:'amount',fine:'amount',enforcer_code:'enforcer',enforcer_no:'enforcer',in_time:'start_time',out_time:'end_time',entry_time:'start_time',exit_time:'end_time'}};
+const norm=c=>{const k=String(c).trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');return (ALIASES[TB]||{})[k]||k};
+async function importCSV(inp){const file=inp.files[0];inp.value='';if(!file)return;let rows;
+ try{if(/\\.xlsx?$/i.test(file.name)){if(typeof XLSX==='undefined')return alert('Reading Excel files needs an internet connection. Save the sheet as CSV instead.');
+   const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+   rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,dateNF:'yyyy-mm-dd',defval:''}).map(r=>r.map(v=>String(v))).filter(r=>r.some(v=>v.trim()!==''))}
+  else{const t=await file.text();rows=parseCSV(t,t.split(/\\r?\\n/)[0].includes(',')?',':';')}}
+ catch{return alert('Could not read this file. Please use an .xlsx or .csv file.')}
+ const OK=[...COLS,...(EXTRA[TB]||[])];
+ let hi=0;for(let i=0;i<Math.min(rows.length,10);i++)if(rows[i].filter(c=>c&&OK.includes(norm(c))).length>=2){hi=i;break}
+ rows=rows.slice(hi);
+ if(rows.length<2)return alert('The file has no data rows. The first row must be the column names.');
+ const raw=rows.shift().map(x=>String(x).trim()),h=raw.map(norm);
+ if((TB==='students'||TB==='enforcers')&&!h.includes('code')&&h.includes('id'))h[h.indexOf('id')]='code';
+ const dropId=TB!=='payments'&&h.includes('id')&&!h.includes('created_at')&&!h.includes('user_id'),bad=raw.filter((c,i)=>c&&!OK.includes(h[i]));
+ if(TB==='payments'&&!h.includes('id'))return alert('The first row must contain the "id" column from the exported file. New payments cannot be imported - students submit them in the student portal.');
+ if(!dropId&&h.includes('id')&&bad.length)return alert('This file does not match the "'+TB+'" table (unknown columns: '+bad.join(', ')+'). Open the correct tab first.');
+ if(!h.some(c=>c&&c!=='id'&&OK.includes(c)))return alert('No usable columns found. First row of your file was: '+raw.join(', ')+'\\n\\nColumn names on the "'+TB+'" tab:\\n'+OK.filter(c=>c!=='id'&&c!=='created_at').join(', '));
+ const data=rows.map((r,j)=>{const o={};h.forEach((c,i)=>{if(c==='id'?!dropId:(EC.includes(c)||(EXTRA[TB]||[]).includes(c)))o[c]=(r[i]??'').trim()});if(o.contact&&/^7\\d{8}$/.test(o.contact))o.contact='0'+o.contact;o._row=hi+2+j;return o});
+ const seen=raw.map((c,i)=>c&&OK.includes(h[i])?c+' -> '+h[i]:'').filter(Boolean),pv=Object.entries(data[0]).filter(([k])=>k!=='_row').map(([k,v])=>'   '+k+': '+(v||'(empty)')).join('\\n');
+ if(!confirm('Import '+data.length+' rows into "'+TB+'" from "'+file.name+'"?\\n\\nColumns understood: '+seen.join(', ')+(bad.length?'\\nIgnored columns: '+bad.join(', '):'')+(dropId?'\\nThe id column is ignored (this is not an export).':'')+'\\n\\nThe first row will be read as:\\n'+pv+'\\n\\nIf this looks wrong, press Cancel. Tip: download a full backup first.'))return;
+ try{const r=await api('/api/admin/table/'+TB+'/import',{method:'POST',json:{rows:data}});showT(TB);
+  const m='Updated '+r.updated+', added '+r.added+' rows.'+(r.defaulted?'\\n\\n'+r.defaulted+' new student(s) had no password, so their IT number is their password until you reset it (Edit -> New password).':'');
+  r.defaulted?alert(m):toast(m)}catch(x){alert(x.message)}}
+function filt(){const q=$('#dq').value.toLowerCase();$$('#dv tbody tr').forEach(r=>r.hidden=!r.textContent.toLowerCase().includes(q))}
+matchPw($('#ef'));
+if(localStorage[K])dash();
 </script></body></html>

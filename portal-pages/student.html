@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css"><title>SLIIT Parking</title></head><body data-portal="student"><div class="wrap">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet"><link rel="icon" href="/logo.png"><link rel="stylesheet" href="/style.css"><title>SLIIT Parking</title></head><body data-portal="student"><div class="wrap">
 
 <section class="view" id="landing"><div class="glass narrow center"><div data-logo></div><h1>SLIIT PARKING</h1><p class="sub">Vehicle pass and parking fees for students</p>
 <button class="pill" onclick="show('login')">Log in</button> <button class="pill" onclick="show('register')">Register</button></div></section>
@@ -7,16 +7,16 @@
 <label>IT Number</label><input id="lc" autocomplete="username" required><label>Password</label><input id="lp" type="password" autocomplete="current-password" required><br>
 <button class="pill block">Log in</button><p class="center small"><a href="#" onclick="show('landing')">Back</a> &nbsp;|&nbsp; <a href="#" onclick="show('register')">Create an account</a></p></form></section>
 
-<section class="view hidden" id="register"><form class="glass" onsubmit="doReg(event)"><h3 class="center">Student Registration for SLIIT Parking</h3>
-<div class="grid2"><div><label>Student Registration Number</label><input name="code" placeholder="IT26123567" required></div><div><label>Student Full Name</label><input name="name" required></div>
-<div><label>Login Password</label><input name="password" type="password" minlength="6" required></div><div><label>Login Password Confirmation</label><input name="confirm" type="password" required></div>
+<section class="view hidden" id="register"><form class="glass" id="rf" onsubmit="doReg(event)"><h3 class="center">Student Registration for SLIIT Parking</h3>
+<div class="grid2"><div><label>Student Registration Number</label><input name="code" placeholder="IT26123567" maxlength="10" pattern="[A-Za-z]{2}[0-9]{8}" title="2 letters followed by 8 digits" required><div class="small" id="idmsg"></div></div><div><label>Student Full Name</label><input name="name" required></div>
+<div><label>Login Password</label><input name="password" type="password" minlength="6" required></div><div><label>Login Password Confirmation</label><input name="confirm" type="password" required><div class="pwmsg small"></div></div>
 <div><label>Student Contact Number</label><input name="contact" type="tel" required></div><div><label>Student Vehicle Type</label><select name="vehicle_type"><option>Car</option><option>Motorbike</option><option>Three-wheeler</option><option>Van</option><option>Other</option></select></div>
-<div><label>Payment Slip</label><input name="slip" type="file" accept="image/*,.pdf" required></div><div><label>Student Vehicle Number</label><input name="vehicle_reg" placeholder="CCC-6767" required></div></div>
-<p class="small center" id="bank"></p><button class="pill green block">Register</button><p class="center small"><a href="#" onclick="show('landing')">Back</a></p></form></section>
+<div><label>Payment Slip (optional)</label><input name="slip" type="file" accept="image/*,.pdf"></div><div><label>Student Vehicle Number</label><input name="vehicle_reg" placeholder="CCC-6767" maxlength="9" required><div class="small" id="rgmsg"></div></div></div>
+<p class="small center" id="bank"></p><p class="small center">You can register now and pay later. Without a payment slip your QR code stays <b>inactive</b>.</p><button class="pill green block">Register</button><p class="center small"><a href="#" onclick="show('landing')">Back</a></p></form></section>
 
-<section class="view hidden" id="success"><div class="glass narrow center"><div style="font-size:54px" class="ok">&#10004;</div><h3>Successfully Registered!</h3><p class="small">Your pass will be active once the admin verifies your payment slip. Please log in below.</p><button class="pill" onclick="show('login')">Log in</button></div></section>
+<section class="view hidden" id="success"><div class="glass narrow center"><div style="font-size:54px" class="ok">&#10004;</div><h3>Successfully Registered!</h3><p class="small" id="smsg"></p><button class="pill" onclick="show('login')">Log in</button></div></section>
 
-<section class="view hidden" id="dash"><div class="bar"><b class="sp">SLIIT Parking</b><button class="pill" onclick="logout()">Log out</button></div><br>
+<section class="view hidden" id="dash"><div class="bar"><span data-logo-sm></span><b class="sp">SLIIT Parking</b><button class="pill" onclick="logout()">Log out</button></div><br>
 <div class="split"><div class="glass"><div class="who" id="who"></div><div id="kv"></div></div><div id="passbox"></div></div>
 <div class="actions"><button class="pill" onclick="hist()">Payment History</button><button class="pill red" onclick="openPay()">Pay Fees</button></div></section>
 
@@ -24,19 +24,43 @@
 
 <section class="view hidden" id="pay"><p><a href="#" onclick="home();return false">&lsaquo; Back</a></p><div class="split"><div class="glass"><h3>Unpaid fees</h3><div id="fl"></div></div><div class="glass" id="pf"></div></div></section>
 </div><script src="/common.js"></script><script>
-let ME,INFO={};
+let ME,INFO={},PASSURL;
 async function doLogin(e){e.preventDefault();try{const r=await api('/api/student/login',{method:'POST',json:{code:$('#lc').value,password:$('#lp').value}});localStorage[K]=r.token;await home()}catch(x){toast(x.message,1)}}
-async function doReg(e){e.preventDefault();try{await api('/api/student/register',{method:'POST',body:new FormData(e.target)});e.target.reset();show('success')}catch(x){toast(x.message,1)}}
+async function doReg(e){e.preventDefault();const fd=new FormData(e.target),slip=fd.get('slip')&&fd.get('slip').size>0;if(!slip)fd.delete('slip');
+ try{await api('/api/student/register',{method:'POST',body:fd});e.target.reset();$('#smsg').textContent=slip?'Your pass and QR code will be active once the admin verifies your payment slip. Please log in below.':'Your QR code is inactive until you pay for a vehicle pass. Log in, then use Pay Fees > Vehicle Pass to upload your payment slip.';show('success')}catch(x){toast(x.message,1)}}
+const loadImg=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src});
+function rr(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath()}
+// Draws the vehicle pass picture (header logo, QR with crest, corner brackets, VEHICLE PASS) - shown on screen and used for the download
+async function buildPass(qrUrl,active){
+ const W=800,H=1000,S=1.5,c=document.createElement('canvas');c.width=W*S;c.height=H*S;const x=c.getContext('2d');x.scale(S,S);
+ try{await document.fonts.load('800 80px Poppins')}catch{}
+ const [uni,crest,qr]=await Promise.all([loadImg('/logo-uni.jpg'),loadImg('/logo.png'),loadImg(qrUrl)]);
+ x.fillStyle='#ecebe7';rr(x,0,0,W,H,44);x.fill();
+ if(uni){const w=664,h=w*uni.height/uni.width;x.drawImage(uni,(W-w)/2,40,w,h)}
+ else{x.fillStyle='#232a6e';x.textAlign='center';x.font='800 96px Poppins,Arial,sans-serif';x.fillText('SLIIT UNI',W/2,150)}
+ const bx=88,by=232,bs=624,t=14,L=80,o=t/2;
+ x.strokeStyle='#1a1f3a';x.lineWidth=t;x.lineCap='round';x.beginPath();
+ [[bx+o,by+o,1,1],[bx+bs-o,by+o,-1,1],[bx+o,by+bs-o,1,-1],[bx+bs-o,by+bs-o,-1,-1]].forEach(([a,b,dx,dy])=>{x.moveTo(a+dx*L,b);x.lineTo(a,b);x.lineTo(a,b+dy*L)});x.stroke();
+ const qs=496,qx=(W-qs)/2,qy=by+(bs-qs)/2;
+ x.globalAlpha=active?1:.22;
+ if(qr)x.drawImage(qr,qx,qy,qs,qs);
+ if(crest){const ch=qs*.24,cw=ch*crest.width/crest.height,p=10,cx=W/2-cw/2,cy=qy+qs/2-ch/2;x.fillStyle='#ecebe7';rr(x,cx-p,cy-p,cw+2*p,ch+2*p,12);x.fill();x.drawImage(crest,cx,cy,cw,ch)}
+ x.globalAlpha=1;
+ if(!active){x.save();x.translate(W/2,qy+qs/2);x.rotate(-Math.PI/9);x.fillStyle='#d33a4a';x.textAlign='center';x.textBaseline='middle';x.font='800 84px Poppins,Arial,sans-serif';x.fillText('INACTIVE',0,0);x.restore()}
+ let fs=86;x.fillStyle='#232a6e';x.textAlign='center';x.textBaseline='alphabetic';x.font='800 '+fs+'px Poppins,Arial Black,Arial,sans-serif';
+ const tw=x.measureText('VEHICLE PASS').width;if(tw>650){fs=Math.floor(fs*650/tw);x.font='800 '+fs+'px Poppins,Arial Black,Arial,sans-serif'}
+ x.fillText('VEHICLE PASS',W/2,by+bs+34+fs*0.9);
+ return c.toDataURL('image/png')}
+function dlPass(){const a=document.createElement('a');a.href=PASSURL;a.download='SLIIT-Vehicle-Pass-'+ME.code+'.png';document.body.append(a);a.click();a.remove()}
 async function home(){ME=await api('/api/student/me');const od=ME.overdue;
  $('#who').innerHTML=`<div class="avatar">${esc(ME.name[0])}</div><div><b>${esc(ME.name)}</b><small>${esc(ME.code)}</small></div>`;
  $('#kv').innerHTML=kv([['Student Name',ME.name],['Contact',ME.contact],['Overdue Fees',od.n?money(od.total)+' ('+od.n+' fee'+(od.n>1?'s':'')+')':'None',od.n?'bad':'ok']],'one');
- let h;
- if(ME.status!=='NONE'){const {qr}=await api('/api/student/qr'),p=PASS[ME.status];
-  h=`<div class="glass pass"><div class="qrbox"><div class="brand"><div class="crest" style="width:24px;height:28px;font-size:6px">SLIIT</div>SLIIT UNI</div><img class="qr" src="${qr}" alt="QR"><b>VEHICLE PASS</b></div>`+kv([['Status',p[0],p[1]],['Vehicle No',ME.reg],['Vehicle Type',ME.type],['Pass Validity',fmtD(ME.expiry)]])+'</div>';
-  if(ME.pendingPass)h+='<p class="center warn small">Renewal payment is awaiting verification.</p>';
-  else if(ME.status==='EXPIRED')h+='<p class="center bad small">Your pass has expired. Tap <b>Pay Fees</b> and choose Vehicle Pass to renew.</p>';
- }else if(ME.pendingPass)h='<div class="glass center"><i>Vehicle Pass Pending...</i><br>Awaiting Payment Verification</div>';
- else h=`<div class="glass center">${ME.lastPass&&ME.lastPass.status==='rejected'?'<b class="bad">Your payment was rejected</b><br>'+esc(ME.lastPass.reject_reason)+'<br><br>':''}You do not have a vehicle pass yet.<br>Tap <b>Pay Fees</b> then <b>Vehicle Pass</b> to apply.</div>`;
+ const {qr}=await api('/api/student/qr'),act=ME.status==='ACTIVE',
+  lb=act?['Active','ok']:ME.status==='EXPIRED'?['Expired','bad']:ME.pendingPass?['Pending approval','warn']:['Inactive','bad'];
+ PASSURL=await buildPass(qr,act);
+ let h=`<div class="glass pass"><div class="passcol"><img class="passimg" src="${PASSURL}" alt="Vehicle pass QR code"><button class="pill block" onclick="dlPass()">Download QR</button></div>`+kv([['Status',lb[0],lb[1]],['Student ID',ME.code],['Vehicle No',ME.reg],['Vehicle Type',ME.type],['Pass Validity',fmtD(ME.expiry)]])+'</div>';
+ if(ME.pendingPass)h+='<p class="center warn small">Your payment slip is awaiting verification. The QR code becomes active once the admin approves it.</p>';
+ else if(!act)h+=`<p class="center bad small">${ME.lastPass&&ME.lastPass.status==='rejected'?'Your last payment was rejected: '+esc(ME.lastPass.reject_reason)+'. ':''}${ME.status==='EXPIRED'?'Your pass has expired. ':'Your QR code is inactive. '}Tap <b>Pay Fees</b>, choose <b>Vehicle Pass</b> and upload your payment slip to activate it.</p>`;
  $('#passbox').innerHTML=h;show('dash')}
 async function hist(){const r=await api('/api/student/payments');
  $('#hl').innerHTML=r.map(p=>`<div class="row" style="cursor:default"><b>${money(p.amount)}</b><span>${fmtD(p.created_at)}</span><span class="sp small">${p.kind==='pass'?'Vehicle Pass':'Parking Fee'} - ${esc(p.vehicle_reg)}</span><a href="#" onclick="openSlip(${p.id});return false">View Upload</a>${st(p.status)}</div>${p.reject_reason?'<p class="bad small">Reason: '+esc(p.reject_reason)+'</p>':''}`).join('')||'<p class="center small">No payments yet.</p>';show('history')}
@@ -48,11 +72,12 @@ const ro=(l,v)=>`<label>${l}</label><input value="${esc(v)}" readonly>`;
 const wrapForm=(t,inner)=>`<h3>${t}</h3><form onsubmit="submitPay(event)">${inner}<label>Payment Slip</label><input type="file" name="slip" accept="image/*,.pdf" required><p class="small center">${esc(INFO.bank_info)}</p><button class="pill green block">Submit payment</button><p class="center small"><a href="#" onclick="choose();return false">Cancel</a></p></form>`;
 function payFee(id){const f=FEES.find(x=>x.id==id);$('#pf').innerHTML=wrapForm('Payment For: Parking Fee','<input type="hidden" name="kind" value="fee"><input type="hidden" name="fee_id" value="'+f.id+'">'+ro('Date of Issue',fmtD(f.end_time))+ro('Vehicle Number',f.vehicle_reg)+ro('Amount',money(f.amount))+ro('Student ID',ME.code))}
 function passForm(){const types=['Car','Motorbike','Three-wheeler','Van','Other'];
- $('#pf').innerHTML=wrapForm('Payment For: Vehicle Pass (Apply / Renew)','<input type="hidden" name="kind" value="pass"><label>Vehicle Number</label><input name="vehicle_reg" value="'+esc(ME.reg)+'" required><label>Vehicle Type</label><select name="vehicle_type">'+types.map(t=>'<option'+(t===ME.type?' selected':'')+'>'+t+'</option>').join('')+'</select>'+ro('Student ID',ME.code)+ro('Amount',money(INFO.pass_price)))}
+ $('#pf').innerHTML=wrapForm('Payment For: Vehicle Pass (Apply / Renew)','<input type="hidden" name="kind" value="pass"><label>Vehicle Number</label><input id="pvr" name="vehicle_reg" maxlength="9" value="'+esc(ME.reg)+'" required><div class="small" id="pvm"></div><label>Vehicle Type</label><select name="vehicle_type">'+types.map(t=>'<option'+(t===ME.type?' selected':'')+'>'+t+'</option>').join('')+'</select>'+ro('Student ID',ME.code)+ro('Amount',money(INFO.pass_price)));regCheck($('#pvr'),$('#pvm'))}
 function unregForm(){$('#pf').innerHTML=wrapForm('Payment For: Parking Fee (Unregistered)','<input type="hidden" name="kind" value="fee"><label>Vehicle Number</label><input id="ur" placeholder="e.g. KS-9467" onchange="lookup(this)" required><label>Unpaid fee</label><select id="fsel" name="fee_id" required onchange="amt()"><option value="">Enter the vehicle number first</option></select>'+'<label>Amount</label><input id="famt" readonly>'+ro('Student ID',ME.code))}
 async function lookup(i){const r=await api('/api/student/fees/lookup?reg='+encodeURIComponent(i.value));$('#fsel').innerHTML=r.map(f=>`<option value="${f.id}" data-a="${f.amount}">${fmtD(f.end_time)} - ${money(f.amount)}</option>`).join('')||'<option value="">No unpaid fee found for this vehicle</option>';amt()}
 function amt(){const o=$('#fsel').selectedOptions[0];$('#famt').value=o&&o.dataset.a?money(o.dataset.a):''}
 async function submitPay(e){e.preventDefault();try{await api('/api/student/pay',{method:'POST',body:new FormData(e.target)});toast('Submitted - the admin will verify your slip');await home()}catch(x){toast(x.message,1)}}
 api('/api/student/info').then(i=>$('#bank').textContent='Annual vehicle pass: '+money(i.pass_price)+'. '+i.bank_info).catch(()=>{});
+idCheck($('#rf').elements.code,$('#idmsg'));regCheck($('#rf').elements.vehicle_reg,$('#rgmsg'));matchPw($('#rf'));
 if(localStorage[K])home().catch(()=>show('landing'));
 </script></body></html>

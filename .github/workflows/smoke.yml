@@ -3,8 +3,16 @@ name: Production smoke tests
 on:
   workflow_dispatch:
     inputs:
-      base_url:
-        description: Optional deployment URL (defaults to production)
+      student_url:
+        description: Student portal URL (optional)
+        required: false
+        type: string
+      admin_url:
+        description: Admin portal URL (optional)
+        required: false
+        type: string
+      enforcer_url:
+        description: Enforcer portal URL (optional)
         required: false
         type: string
 
@@ -21,7 +29,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Run read-only smoke tests
+      - name: Run read-only production smoke tests
         env:
-          BASE_URL: ${{ inputs.base_url || 'https://sliit-parking-beta.vercel.app' }}
+          STUDENT_URL: ${{ inputs.student_url || 'https://sliit-parking-beta.vercel.app' }}
+          ADMIN_URL: ${{ inputs.admin_url || 'https://sliit-parking-admin.vercel.app' }}
+          ENFORCER_URL: ${{ inputs.enforcer_url || 'https://sliit-parking-enforcer.vercel.app' }}
         run: npm run test:smoke
