@@ -447,8 +447,15 @@ async function settings(conn = null) {
   };
 }
 
+function normalizeVehicleType(value) {
+  const type = String(value || '').trim().toLowerCase();
+  if (type === 'car') return 'Car';
+  if (type === 'motorcycle' || type === 'motorbike') return 'Motorcycle';
+  fail('Vehicle type must be Car or Motorcycle');
+}
+
 function passPriceFor(vehicleType, currentSettings) {
-  return Number(/bike/i.test(String(vehicleType || '')) ? currentSettings.pass_bike_price : currentSettings.pass_price);
+  return Number(/motorcycle|motorbike|bike/i.test(String(vehicleType || '')) ? currentSettings.pass_bike_price : currentSettings.pass_price);
 }
 
 async function passOf(userId, conn = null) {
@@ -786,7 +793,8 @@ app.post('/api/student/register', upload.single('slip'), wrap(async (req, res) =
   const code = normalCode(body.code);
   const reg = normReg(body.vehicle_reg);
   if (!ID_RE.test(code)) fail(ID_MSG);
-  if (!String(body.name || '').trim() || !reg || !body.vehicle_type) fail('Please fill in every field');
+  if (!String(body.name || '').trim() || !reg) fail('Please fill in every field');
+  const vehicleType = normalizeVehicleType(body.vehicle_type);
   const contact = validPhone(body.contact);
   if (!REG_RE.test(reg)) fail(REG_MSG);
   if (String(body.password || '').length < 6) fail('Password must be at least 6 characters');
@@ -801,12 +809,12 @@ app.post('/api/student/register', upload.single('slip'), wrap(async (req, res) =
       "INSERT INTO users(role,code,name,contact,password_hash,qr_token) VALUES('student',?,?,?,?,?)",
       [code, String(body.name).trim(), contact, bcrypt.hashSync(body.password, 10), crypto.randomUUID()], conn
     );
-    await insert('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)', [userId, reg, body.vehicle_type], conn);
+    await insert('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)', [userId, reg, vehicleType], conn);
     if (slipKey) {
       const current = await settings(conn);
       await insert(
         "INSERT INTO payments(user_id,kind,vehicle_reg,vehicle_type,amount,slip_file) VALUES(?,'pass',?,?,?,?)",
-        [userId, reg, body.vehicle_type, passPriceFor(body.vehicle_type, current), slipKey], conn
+        [userId, reg, vehicleType, passPriceFor(vehicleType, current), slipKey], conn
       );
     }
   });
@@ -891,7 +899,8 @@ app.post('/api/student/pay', auth('student'), upload.single('slip'), wrap(async 
       await run("UPDATE fees SET status='pending' WHERE id=?", [fee.id], conn);
     } else if (body.kind === 'pass') {
       const reg = normReg(body.vehicle_reg);
-      if (!reg || !body.vehicle_type) fail('Vehicle number and type are required');
+      if (!reg) fail('Vehicle number and type are required');
+      const vehicleType = normalizeVehicleType(body.vehicle_type);
       if (!REG_RE.test(reg)) fail(REG_MSG);
       if (await get("SELECT 1 FROM payments WHERE user_id=? AND kind='pass' AND status='pending' LIMIT 1", [req.user.id], conn)) {
         fail('Your previous pass payment is still awaiting verification');
@@ -902,7 +911,7 @@ app.post('/api/student/pay', auth('student'), upload.single('slip'), wrap(async 
       const current = await settings(conn);
       await insert(
         "INSERT INTO payments(user_id,kind,vehicle_reg,vehicle_type,amount,slip_file) VALUES(?,'pass',?,?,?,?)",
-        [req.user.id, reg, body.vehicle_type, passPriceFor(body.vehicle_type, current), slipKey], conn
+        [req.user.id, reg, vehicleType, passPriceFor(vehicleType, current), slipKey], conn
       );
     } else {
       fail('Invalid payment type');
@@ -1083,6 +1092,8 @@ async function updateRow(table, id, body, conn = null) {
       value = Number(value);
     } else if (column === 'contact') {
       value = validPhone(value);
+    } else if (column === 'type' || column === 'vehicle_type') {
+      value = normalizeVehicleType(value);
     } else if (column === 'code') {
       value = normalCode(value);
       if (table.student && !ID_RE.test(value)) {
@@ -1138,6 +1149,7 @@ async function studentId(code, conn = null) {
 async function addStudent(row, conn) {
   const code = normalCode(row.code);
   const reg = normReg(row.vehicle);
+  const vehicleType = normalizeVehicleType(row.vehicle_type || 'Car');
   if (!ID_RE.test(code)) fail(`${ID_MSG} - got "${String(row.code || '')}"`);
   if (reg && !REG_RE.test(reg)) fail(`${REG_MSG} - got "${String(row.vehicle || '')}"`);
   if (!String(row.name || '').trim()) fail('name is required');
@@ -1156,7 +1168,7 @@ async function addStudent(row, conn) {
     "INSERT INTO users(role,code,name,contact,password_hash,qr_token) VALUES('student',?,?,?,?,?)",
     [code, String(row.name).trim(), contact, bcrypt.hashSync(password, 10), crypto.randomUUID()], conn
   );
-  if (reg) await insert('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)', [userId, reg, row.vehicle_type || 'Car'], conn);
+  if (reg) await insert('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)', [userId, reg, vehicleType], conn);
   if (passEnd) {
     const current = await settings(conn);
     await insert('INSERT INTO passes(user_id,student_id,start_date,end_date) VALUES(?,?,?,?)', [userId, code, new Date(passEnd.getTime() - Number(current.plan_days) * 864e5).toISOString(), passEnd.toISOString()], conn);
