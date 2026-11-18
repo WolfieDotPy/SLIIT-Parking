@@ -118,4 +118,6 @@ async function submitPay(e){e.preventDefault();try{await api('/api/student/pay',
 api('/api/student/info').then(i=>{INFO=i;$('#bank').textContent='Annual vehicle pass prices — Car: '+money(i.pass_price)+' | Motorbike: '+money(i.pass_bike_price)+'. '+i.bank_info}).catch(()=>{});
 idCheck($('#rf').elements.code,$('#idmsg'));regCheck($('#rf').elements.vehicle_reg,$('#rgmsg'));matchPw($('#rf'));
 if(portalToken())home().catch(()=>show('landing'));
-</script></body></html>
+</script>
+<footer class="copyright-footer">© 2026 Team 6ix Seve7 Solutions. All Rights Reserved.</footer>
+</body></html>
