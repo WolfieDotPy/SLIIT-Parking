@@ -951,6 +951,7 @@ async function updateRow(table, id, body, conn = null) {
     if (body[column] === undefined) continue;
     let value = body[column];
     if (value === '' || value === null) {
+      if (column === 'contact') fail(PHONE_MSG);
       if (column === 'code' && table.student) fail(ID_MSG);
       value = null;
     } else if (DATE_COLUMNS.has(column)) {
