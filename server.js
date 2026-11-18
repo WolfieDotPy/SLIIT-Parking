@@ -367,6 +367,13 @@ const fail = (message, status = 400) => {
   throw error;
 };
 
+const PHONE_RE = /^0\d{9}$/;
+const PHONE_MSG = 'Phone number must be exactly 10 digits and start with 0 (e.g. 0771234567)';
+const validPhone = value => {
+  const phone = String(value || '').trim();
+  if (!PHONE_RE.test(phone)) fail(PHONE_MSG);
+  return phone;
+};
 const ID_RE = /^[A-Z]{2}\d{8}$/;
 const ID_MSG = 'Student ID must be 10 characters: 2 letters followed by 8 digits (e.g. IT26123567)';
 const REG_RE = /^[A-Z0-9]{2,3}-\d{4}$/;
@@ -732,7 +739,8 @@ app.post('/api/student/register', upload.single('slip'), wrap(async (req, res) =
   const code = normalCode(body.code);
   const reg = normReg(body.vehicle_reg);
   if (!ID_RE.test(code)) fail(ID_MSG);
-  if (!String(body.name || '').trim() || !String(body.contact || '').trim() || !reg || !body.vehicle_type) fail('Please fill in every field');
+  if (!String(body.name || '').trim() || !reg || !body.vehicle_type) fail('Please fill in every field');
+  const contact = validPhone(body.contact);
   if (!REG_RE.test(reg)) fail(REG_MSG);
   if (String(body.password || '').length < 6) fail('Password must be at least 6 characters');
   if (body.password !== body.confirm) fail('Passwords do not match');
@@ -744,7 +752,7 @@ app.post('/api/student/register', upload.single('slip'), wrap(async (req, res) =
     if (await get('SELECT 1 FROM vehicles WHERE reg_number=?', [reg], conn)) fail('This vehicle number is already registered');
     const userId = await insert(
       "INSERT INTO users(role,code,name,contact,password_hash,qr_token) VALUES('student',?,?,?,?,?)",
-      [code, String(body.name).trim(), String(body.contact).trim(), bcrypt.hashSync(body.password, 10), crypto.randomUUID()], conn
+      [code, String(body.name).trim(), contact, bcrypt.hashSync(body.password, 10), crypto.randomUUID()], conn
     );
     await insert('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)', [userId, reg, body.vehicle_type], conn);
     if (slipKey) {
@@ -891,13 +899,14 @@ function nextEnforcerCode(existing) {
 }
 app.post('/api/admin/enforcers', auth('admin'), wrap(async (req, res) => {
   const body = req.body || {};
-  if (!String(body.name || '').trim() || !String(body.contact || '').trim()) fail('Name and contact details are required');
+  if (!String(body.name || '').trim()) fail('Name and contact details are required');
+  const contact = validPhone(body.contact);
   if (String(body.password || '').length < 6) fail('Password must be at least 6 characters');
   if (body.password !== body.confirm) fail('Passwords do not match');
   const code = await transaction(async conn => {
     const existing = await all("SELECT code FROM users WHERE role='enforcer'", [], conn);
     const next = nextEnforcerCode(existing);
-    await insert("INSERT INTO users(role,code,name,contact,password_hash) VALUES('enforcer',?,?,?,?)", [next, body.name.trim(), body.contact.trim(), bcrypt.hashSync(body.password, 10)], conn);
+    await insert("INSERT INTO users(role,code,name,contact,password_hash) VALUES('enforcer',?,?,?,?)", [next, body.name.trim(), contact, bcrypt.hashSync(body.password, 10)], conn);
     return next;
   });
   res.json({ code });
@@ -949,6 +958,8 @@ async function updateRow(table, id, body, conn = null) {
     } else if (NUMBER_COLUMNS.has(column)) {
       if (!Number.isFinite(Number(value))) fail(`${column} must be a number`);
       value = Number(value);
+    } else if (column === 'contact') {
+      value = validPhone(value);
     } else if (column === 'code') {
       value = normalCode(value);
       if (table.student && !ID_RE.test(value)) {
@@ -1007,6 +1018,7 @@ async function addStudent(row, conn) {
   if (!ID_RE.test(code)) fail(`${ID_MSG} - got "${String(row.code || '')}"`);
   if (reg && !REG_RE.test(reg)) fail(`${REG_MSG} - got "${String(row.vehicle || '')}"`);
   if (!String(row.name || '').trim()) fail('name is required');
+  const contact = validPhone(row.contact);
   const suppliedPassword = String(row.password || '').trim();
   const password = suppliedPassword || code;
   if (suppliedPassword && suppliedPassword.length < 6) fail('password must be at least 6 characters');
@@ -1019,7 +1031,7 @@ async function addStudent(row, conn) {
   }
   const userId = await insert(
     "INSERT INTO users(role,code,name,contact,password_hash,qr_token) VALUES('student',?,?,?,?,?)",
-    [code, String(row.name).trim(), String(row.contact || '').trim() || null, bcrypt.hashSync(password, 10), crypto.randomUUID()], conn
+    [code, String(row.name).trim(), contact, bcrypt.hashSync(password, 10), crypto.randomUUID()], conn
   );
   if (reg) await insert('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)', [userId, reg, row.vehicle_type || 'Car'], conn);
   if (passEnd) {
@@ -1031,11 +1043,12 @@ async function addStudent(row, conn) {
 
 async function addEnforcer(row, conn) {
   if (!String(row.name || '').trim()) fail('name is required');
+  const contact = validPhone(row.contact);
   const password = String(row.password || '').trim();
   if (password.length < 6) fail('password (at least 6 characters) is required');
   const code = normalCode(row.code) || nextEnforcerCode(await all("SELECT code FROM users WHERE role='enforcer'", [], conn));
   if (await get('SELECT 1 FROM users WHERE code=?', [code], conn)) fail(`code ${code} is already used`);
-  await insert("INSERT INTO users(role,code,name,contact,password_hash) VALUES('enforcer',?,?,?,?)", [code, String(row.name).trim(), String(row.contact || '').trim() || null, bcrypt.hashSync(password, 10)], conn);
+  await insert("INSERT INTO users(role,code,name,contact,password_hash) VALUES('enforcer',?,?,?,?)", [code, String(row.name).trim(), contact, bcrypt.hashSync(password, 10)], conn);
   return false;
 }
 
