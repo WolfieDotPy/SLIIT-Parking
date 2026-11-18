@@ -245,7 +245,7 @@ body>.ambient-flow-bg{
   overflow:hidden;
   pointer-events:none;
   opacity:0;
-  transition:opacity .7s ease;
+  transition:opacity .7s ease,filter 1.4s cubic-bezier(.2,.7,.2,1);
   background:
     radial-gradient(ellipse at 50% 48%,rgba(108,126,238,.13),transparent 58%),
     radial-gradient(ellipse at 18% 52%,rgba(137,112,231,.10),transparent 44%),
@@ -263,7 +263,7 @@ body>.ambient-flow-bg::before{
     radial-gradient(ellipse at 50% 42%,rgba(76,196,208,.10),transparent 44%);
   filter:blur(28px);
   transform:translate3d(-3%,1%,0) rotate(-4deg) scale(1.05);
-  animation:ambientFlowDrift 18s ease-in-out infinite alternate;
+  animation:ambientFlowDrift 11s ease-in-out infinite alternate;
 }
 body>.ambient-flow-bg::after{
   content:"";
@@ -273,7 +273,7 @@ body>.ambient-flow-bg::after{
   opacity:.35;
   filter:blur(9px);
   transform:translateX(-2%);
-  animation:ambientFlowStreaks 24s linear infinite;
+  animation:ambientFlowStreaks 16s linear infinite;
 }
 :root[data-theme="dark"] body>.ambient-flow-bg{
   background:
