@@ -340,6 +340,7 @@ async function initializeDatabase() {
   const defaults = [
     ['hourly_rate', '100'],
     ['pass_price', '5000'],
+    ['pass_bike_price', '5000'],
     ['grace_minutes', '15'],
     ['plan_days', '365'],
     ['bank_info', 'Bank details not set yet - admin can add them in Settings.']
@@ -385,10 +386,14 @@ const dateOrNull = value => {
 async function settings(conn = null) {
   const rows = await all('SELECT key,value FROM settings', [], conn);
   return {
-    hourly_rate: '100', pass_price: '5000', grace_minutes: '15', plan_days: '365',
+    hourly_rate: '100', pass_price: '5000', pass_bike_price: '5000', grace_minutes: '15', plan_days: '365',
     bank_info: 'Bank details not set yet - admin can add them in Settings.',
     ...Object.fromEntries(rows.map(row => [row.key, row.value]))
   };
+}
+
+function passPriceFor(vehicleType, currentSettings) {
+  return Number(/bike/i.test(String(vehicleType || '')) ? currentSettings.pass_bike_price : currentSettings.pass_price);
 }
 
 async function passOf(userId, conn = null) {
@@ -718,7 +723,7 @@ app.post('/api/:role/impersonation/end', (req, res, next) => {
 // ---------- Student
 app.get('/api/student/info', wrap(async (_req, res) => {
   const current = await settings();
-  res.json({ pass_price: current.pass_price, bank_info: current.bank_info, plan_days: current.plan_days });
+  res.json({ pass_price: current.pass_price, pass_bike_price: current.pass_bike_price, bank_info: current.bank_info, plan_days: current.plan_days });
 }));
 
 app.post('/api/student/register', upload.single('slip'), wrap(async (req, res) => {
@@ -745,7 +750,7 @@ app.post('/api/student/register', upload.single('slip'), wrap(async (req, res) =
       const current = await settings(conn);
       await insert(
         "INSERT INTO payments(user_id,kind,vehicle_reg,vehicle_type,amount,slip_file) VALUES(?,'pass',?,?,?,?)",
-        [userId, reg, body.vehicle_type, Number(current.pass_price), slipKey], conn
+        [userId, reg, body.vehicle_type, passPriceFor(body.vehicle_type, current), slipKey], conn
       );
     }
   });
@@ -808,7 +813,7 @@ app.post('/api/student/pay', auth('student'), upload.single('slip'), wrap(async 
       const current = await settings(conn);
       await insert(
         "INSERT INTO payments(user_id,kind,vehicle_reg,vehicle_type,amount,slip_file) VALUES(?,'pass',?,?,?,?)",
-        [req.user.id, reg, body.vehicle_type, Number(current.pass_price), slipKey], conn
+        [req.user.id, reg, body.vehicle_type, passPriceFor(body.vehicle_type, current), slipKey], conn
       );
     } else {
       fail('Invalid payment type');
@@ -901,7 +906,7 @@ app.get('/api/admin/settings', auth('admin'), wrap(async (_req, res) => res.json
 app.put('/api/admin/settings', auth('admin'), wrap(async (req, res) => {
   const body = req.body || {};
   await transaction(async conn => {
-    for (const key of ['hourly_rate', 'pass_price', 'grace_minutes', 'plan_days']) {
+    for (const key of ['hourly_rate', 'pass_price', 'pass_bike_price', 'grace_minutes', 'plan_days']) {
       if (body[key] === undefined) continue;
       if (body[key] === '' || !Number.isFinite(Number(body[key])) || Number(body[key]) < 0) fail(`Invalid value for ${key}`);
       await run('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', [key, String(body[key])], conn);
