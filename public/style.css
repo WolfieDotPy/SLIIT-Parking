@@ -168,7 +168,7 @@ body::before,body::after{transition:opacity .5s ease}
 .copyright-footer{
   position:fixed;
   left:50%;
-  bottom:8px;
+  bottom:62px;
   transform:translateX(-50%);
   z-index:20;
   width:max-content;
@@ -183,5 +183,5 @@ body::before,body::after{transition:opacity .5s ease}
 }
 :root[data-theme="dark"] .copyright-footer{color:#9299bd}
 @media(max-width:720px){
-  .copyright-footer{bottom:calc(8px + env(safe-area-inset-bottom,0px));font-size:10px;max-width:calc(100vw - 140px)}
+  .copyright-footer{bottom:calc(54px + env(safe-area-inset-bottom,0px));font-size:10px;max-width:calc(100vw - 140px)}
 }
