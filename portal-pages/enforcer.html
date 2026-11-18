@@ -36,4 +36,6 @@ async function loadF(v){F=await api('/api/enforcer/fees?view='+v);drawF()}
 function drawF(){const q=$('#fq').value.toLowerCase();$('#fl').innerHTML=F.filter(f=>f.vehicle_reg.toLowerCase().includes(q)).map(f=>`<div class="row" style="cursor:default"><b>${esc(f.vehicle_reg)}</b><span class="sp small">${fmtD(f.end_time||f.created_at)} - ${money(f.amount)}</span>${st(f.status)}</div>`).join('')||'<p class="center small">No fees found.</p>'}
 regCheck($('#av'),$('#avm'),true);
 if(portalToken())home().catch(()=>show('login'));
-</script></body></html>
+</script>
+<footer class="copyright-footer">© 2026 Team 6ix Seve7 Solutions. All Rights Reserved.</footer>
+</body></html>
