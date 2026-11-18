@@ -113,3 +113,13 @@ body.mobile::after{background:radial-gradient(circle at 15% 8%,#142f60,transpare
 *,*::before,*::after{transition-property:background-color,color,border-color,box-shadow,filter;transition-duration:.45s;transition-timing-function:ease}
 body::before,body::after{transition:opacity .5s ease}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Keep the student dashboard's label/value pairs compact and easy to scan. */
+body[data-portal="student"] #kv .kv2.one{gap:5px 14px}
+body[data-portal="student"] #kv .kv2.one>div{line-height:1.2}
+body[data-portal="student"] #kv .kv2.one small{line-height:1.15;margin:0 0 2px}
+body[data-portal="student"] #kv .kv2.one b{display:block;line-height:1.25}
+@media(min-width:961px){
+  body[data-portal="student"] #kv .kv2.one{gap:7px 16px}
+  body[data-portal="student"] #kv .kv2.one small{margin-bottom:2px}
+}
