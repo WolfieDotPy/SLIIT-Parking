@@ -95,3 +95,107 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   });
   document.body.append(button);paint();
 })();
+
+/* Floating student/admin support messenger. */
+let supportStarted=false,supportOpen=false,supportConversationId=null,supportInbox=[];
+function supportTime(value){if(!value)return '';const d=new Date(value);return Number.isNaN(d.getTime())?'':d.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}
+function supportMessagesHtml(messages,role){
+ if(!messages.length)return '<div class="support-empty">No messages yet. Send a message to get the conversation started.</div>';
+ return messages.map(m=>'<div class="support-message '+(m.sender_role===role?'mine':'theirs')+'"><div class="support-bubble">'+esc(m.body).replace(/\n/g,'<br>')+'</div><small>'+esc(m.sender_role===role?'You':m.sender_name||'Admin')+' · '+esc(supportTime(m.created_at))+'</small></div>').join('');
+}
+function supportScrollBottom(){const area=$('#support-messages');if(area)area.scrollTop=area.scrollHeight;}
+function supportSetBadge(count){const badge=$('#support-badge');if(!badge)return;const n=Number(count||0);badge.textContent=n>99?'99+':String(n);badge.classList.toggle('hidden',n<1);}
+function supportBuild(){
+ if($('#support-launcher'))return;
+ const launcher=document.createElement('button');launcher.type='button';launcher.id='support-launcher';launcher.className='pill support-launcher';
+ launcher.innerHTML=(P==='admin'?'💬 Student Messages':'💬 Message the Admin')+' <span id="support-badge" class="support-badge hidden"></span>';
+ launcher.addEventListener('click',()=>supportToggle());
+ const panel=document.createElement('section');panel.id='support-panel';panel.className='support-panel hidden';panel.setAttribute('aria-label',P==='admin'?'Student messages':'Message the Admin');
+ if(P==='admin'){
+  panel.innerHTML='<header class="support-head"><div><b>Student Messages</b><small>Conversations from students</small></div><button type="button" class="support-close" aria-label="Close">×</button></header><div id="support-inbox-view" class="support-inbox-view"><div id="support-inbox" class="support-inbox"></div></div><div id="support-thread-view" class="support-thread-view hidden"><div class="support-thread-head"><button id="support-back" type="button" class="support-back">‹ Inbox</button><div class="support-student-label"><b id="support-student-name"></b><small id="support-student-code"></small></div><button id="support-status" type="button" class="support-status"></button></div><div id="support-messages" class="support-messages"></div><form id="support-form" class="support-compose"><textarea id="support-input" maxlength="4000" rows="2" placeholder="Write a reply…" required></textarea><button class="pill green" type="submit">Send</button></form></div>';
+ }else{
+  panel.innerHTML='<header class="support-head"><div><b>Message the Admin</b><small>Chat with the SLIIT Parking administration</small></div><button type="button" class="support-close" aria-label="Close">×</button></header><div id="support-messages" class="support-messages"></div><form id="support-form" class="support-compose"><textarea id="support-input" maxlength="4000" rows="2" placeholder="Write your message…" required></textarea><button class="pill green" type="submit">Send</button></form>';
+ }
+ document.body.append(launcher,panel);
+ $('.support-close').addEventListener('click',()=>supportToggle(false));
+ $('#support-form').addEventListener('submit',supportSend);
+ if(P==='admin'){
+  $('#support-back').addEventListener('click',supportShowInbox);
+  $('#support-status').addEventListener('click',supportToggleStatus);
+ }
+}
+function supportToggle(force){
+ supportOpen=typeof force==='boolean'?force:!supportOpen;
+ $('#support-panel').classList.toggle('hidden',!supportOpen);
+ if(supportOpen){if(P==='admin')supportLoadInbox();else supportLoadStudent();}
+}
+function supportShowInbox(){supportConversationId=null;$('#support-thread-view').classList.add('hidden');$('#support-inbox-view').classList.remove('hidden');supportLoadInbox();}
+function supportRenderInbox(){
+ const box=$('#support-inbox');if(!box)return;
+ box.innerHTML=supportInbox.map(c=>'<button type="button" class="support-inbox-item '+(Number(c.id)===Number(supportConversationId)?'selected':'')+'" data-conversation="'+Number(c.id)+'"><span class="support-inbox-top"><b>'+esc(c.student_name||'Student')+'</b><span class="support-inbox-time">'+esc(supportTime(c.updated_at))+'</span></span><span class="support-inbox-code">'+esc(c.student_code||'')+'</span><span class="support-inbox-preview">'+esc(c.last_message||'No messages yet')+'</span><span class="support-inbox-meta"><span class="support-state '+(c.status==='resolved'?'resolved':'')+'">'+(c.status==='resolved'?'Resolved':'Open')+'</span>'+(Number(c.unread_count)>0?'<span class="support-unread">'+Number(c.unread_count)+'</span>':'')+'</span></button>').join('')||'<div class="support-empty">No student conversations yet.</div>';
+ box.querySelectorAll('[data-conversation]').forEach(b=>b.addEventListener('click',()=>supportOpenConversation(Number(b.dataset.conversation))));
+ supportSetBadge(supportInbox.reduce((n,c)=>n+Number(c.unread_count||0),0));
+}
+async function supportLoadInbox(){
+ if(P!=='admin'||!portalToken())return;
+ try{supportInbox=await api('/api/admin/support/conversations');supportRenderInbox();}
+ catch(error){if(error.message!=='Please log in')toast(error.message,1);}
+}
+async function supportOpenConversation(id){
+ supportConversationId=id;$('#support-inbox-view').classList.add('hidden');$('#support-thread-view').classList.remove('hidden');await supportLoadAdminThread();
+}
+async function supportLoadAdminThread(){
+ if(P!=='admin'||!supportConversationId)return;
+ try{
+  const r=await api('/api/admin/support/conversations/'+supportConversationId);
+  $('#support-student-name').textContent=r.conversation.student_name||'Student';
+  $('#support-student-code').textContent=r.conversation.student_code||'';
+  const status=$('#support-status');status.textContent=r.conversation.status==='resolved'?'Reopen':'Mark resolved';status.dataset.status=r.conversation.status;
+  const area=$('#support-messages'),nearBottom=area.scrollHeight-area.scrollTop-area.clientHeight<70;
+  area.innerHTML=supportMessagesHtml(r.messages,'admin');if(nearBottom)supportScrollBottom();
+  await supportLoadInbox();
+ }catch(error){toast(error.message,1);supportShowInbox();}
+}
+async function supportLoadStudent(){
+ if(P!=='student'||!portalToken()||sessionStorage.getItem('adminImpersonation'))return;
+ try{
+  const r=await api('/api/student/support');
+  const area=$('#support-messages'),nearBottom=area.scrollHeight-area.scrollTop-area.clientHeight<70;
+  area.innerHTML=supportMessagesHtml(r.messages,'student');if(nearBottom)supportScrollBottom();
+  if(r.conversation)supportConversationId=r.conversation.id;
+  const unread=await api('/api/student/support/unread');supportSetBadge(unread.unread);
+ }catch(error){if(error.message!=='Please log in')toast(error.message,1);}
+}
+async function supportSend(event){
+ event.preventDefault();const input=$('#support-input'),body=input.value.trim();if(!body)return;
+ const button=event.submitter||event.target.querySelector('button');button.disabled=true;
+ try{
+  if(P==='admin'){
+   if(!supportConversationId)throw new Error('Select a student conversation first');
+   await api('/api/admin/support/conversations/'+supportConversationId+'/messages',{method:'POST',json:{body}});
+   input.value='';await supportLoadAdminThread();
+  }else{
+   await api('/api/student/support/messages',{method:'POST',json:{body}});
+   input.value='';await supportLoadStudent();
+  }
+ }catch(error){toast(error.message,1);}finally{button.disabled=false;input.focus();}
+}
+async function supportToggleStatus(){
+ if(!supportConversationId)return;
+ const current=$('#support-status').dataset.status,next=current==='resolved'?'open':'resolved';
+ try{await api('/api/admin/support/conversations/'+supportConversationId+'/status',{method:'PATCH',json:{status:next}});await supportLoadAdminThread();}
+ catch(error){toast(error.message,1);}
+}
+function initSupportChat(){
+ if(supportStarted||!portalToken())return;
+ if(P==='student'&&sessionStorage.getItem('adminImpersonation'))return;
+ if(!['student','admin'].includes(P))return;
+ supportStarted=true;supportBuild();
+ const refresh=async()=>{
+  if(!portalToken())return;
+  if(supportOpen){if(P==='admin'){if(supportConversationId)await supportLoadAdminThread();else await supportLoadInbox();}else await supportLoadStudent();}
+  else{try{const r=await api(P==='admin'?'/api/admin/support/unread':'/api/student/support/unread');supportSetBadge(r.unread);}catch{}}
+ };
+ refresh();setInterval(refresh,5000);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+}
