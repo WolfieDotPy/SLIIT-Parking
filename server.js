@@ -340,7 +340,6 @@ async function initializeDatabase() {
   const defaults = [
     ['hourly_rate', '100'],
     ['pass_price', '5000'],
-    ['pass_bike_price', '5000'],
     ['grace_minutes', '15'],
     ['plan_days', '365'],
     ['bank_info', 'Bank details not set yet - admin can add them in Settings.']
@@ -348,6 +347,8 @@ async function initializeDatabase() {
   for (const [key, value] of defaults) {
     await run('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING', [key, value]);
   }
+  // Existing installations inherit their current universal pass price for bikes until an admin changes it.
+  await run("INSERT INTO settings(key,value) VALUES('pass_bike_price',(SELECT value FROM settings WHERE key='pass_price')) ON CONFLICT(key) DO NOTHING");
 
   const admin = await get("SELECT id FROM users WHERE role='admin' LIMIT 1");
   if (!admin) {
