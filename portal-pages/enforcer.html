@@ -35,5 +35,5 @@ function fees(){show('fees');tabs('#ft',[['all','All'],['pending','Pending'],['u
 async function loadF(v){F=await api('/api/enforcer/fees?view='+v);drawF()}
 function drawF(){const q=$('#fq').value.toLowerCase();$('#fl').innerHTML=F.filter(f=>f.vehicle_reg.toLowerCase().includes(q)).map(f=>`<div class="row" style="cursor:default"><b>${esc(f.vehicle_reg)}</b><span class="sp small">${fmtD(f.end_time||f.created_at)} - ${money(f.amount)}</span>${st(f.status)}</div>`).join('')||'<p class="center small">No fees found.</p>'}
 regCheck($('#av'),$('#avm'),true);
-if(localStorage[K])home().catch(()=>show('login'));
+if(portalToken())home().catch(()=>show('login'));
 </script></body></html>
