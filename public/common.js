@@ -131,7 +131,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
       // Both axes move the colour field and influence its hue.
       ambient.style.setProperty('--flow-x',x.toFixed(1)+'%');
       ambient.style.setProperty('--flow-y',y.toFixed(1)+'%');
-      const hue=Math.round(184+x*.48+y*.42);
+      const hue=Math.round(178+x*.62+y*.56);
       if(Math.abs(hue-lastHue)>=1){lastHue=hue;ambient.style.filter='hue-rotate('+(hue-220)+'deg)';}
     },{passive:true});
   }
