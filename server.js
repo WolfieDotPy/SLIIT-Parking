@@ -413,7 +413,7 @@ const STUDENT_HOSTS = parseHostList('STUDENT_PORTAL_HOSTS', [
 ]);
 const ADMIN_HOSTS = parseHostList('ADMIN_PORTAL_HOSTS', ['sliit-parking-admin.vercel.app']);
 const ENFORCER_HOSTS = parseHostList('ENFORCER_PORTAL_HOSTS', ['sliit-parking-enforcer.vercel.app']);
-if (process.env.VERCEL_URL) STUDENT_HOSTS.add(String(process.env.VERCEL_URL).replace(/^https?:\/\//, '').split('/')[0].toLowerCase());
+if (process.env.VERCEL_URL) STUDENT_HOSTS.add(String(process.env.VERCEL_URL).split('://').pop().split('/')[0].toLowerCase());
 
 function portalForHost(hostname) {
   const host = String(hostname || '').toLowerCase().split(':')[0];
@@ -442,7 +442,7 @@ app.use((req, res, next) => {
     return next();
   }
 
-  const vercelPreviewHost = String(process.env.VERCEL_URL || '').replace(/^https?:\\/\\//, '').split('/')[0].toLowerCase();
+  const vercelPreviewHost = String(process.env.VERCEL_URL || '').split('://').pop().split('/')[0].toLowerCase();
   const isPreviewHost = Boolean(vercelPreviewHost && host === vercelPreviewHost);
   // On the unique Vercel preview hostname, expose each portal by its path so all three
   // can be reviewed before promotion. Production aliases remain strictly isolated by host.
