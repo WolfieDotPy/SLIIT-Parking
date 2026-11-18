@@ -97,7 +97,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
 })();
 
 
-// Cursor-driven ambient hue shift. Pointer position influences the full background.
+// Cursor-driven ambient hue shift with frame-by-frame easing for smooth movement.
 (function initCursorFlow(){
   const root=document.documentElement;
   const key='sliit-animations';
@@ -108,6 +108,8 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   button.type='button';button.className='pill animation-toggle';
   const ambient=document.createElement('div');
   ambient.className='ambient-flow-bg';ambient.setAttribute('aria-hidden','true');
+  let targetX=50,targetY=50,currentX=50,currentY=50;
+  let targetHue=220,currentHue=220,lastFrame=0,frameId=0;
   function paintButton(){
     root.dataset.animations=enabled?'on':'off';
     button.textContent=enabled?'✧ Effects on':'✧ Effects off';
@@ -115,24 +117,49 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
     button.setAttribute('aria-label',enabled?'Turn background animations off':'Turn background animations on');
     button.title=enabled?'Turn background animations off':'Turn background animations on';
   }
+  function renderFrame(time){
+    frameId=0;
+    if(!enabled||!finePointer)return;
+    const dt=lastFrame?Math.min(64,time-lastFrame):16;
+    lastFrame=time;
+    // Exponential easing keeps even sudden corner-to-corner pointer jumps fluid.
+    const ease=1-Math.exp(-dt/420);
+    currentX+=(targetX-currentX)*ease;
+    currentY+=(targetY-currentY)*ease;
+    currentHue+=(targetHue-currentHue)*ease;
+    ambient.style.setProperty('--flow-x',currentX.toFixed(2)+'%');
+    ambient.style.setProperty('--flow-y',currentY.toFixed(2)+'%');
+    ambient.style.filter='hue-rotate('+(currentHue-220).toFixed(2)+'deg)';
+    if(Math.abs(targetX-currentX)>.04||Math.abs(targetY-currentY)>.04||Math.abs(targetHue-currentHue)>.04){
+      frameId=requestAnimationFrame(renderFrame);
+    }else{
+      currentX=targetX;currentY=targetY;currentHue=targetHue;lastFrame=0;
+    }
+  }
+  function requestFlowFrame(){
+    if(enabled&&finePointer&&!frameId)frameId=requestAnimationFrame(renderFrame);
+  }
   function setEnabled(value){
     enabled=value;localStorage.setItem(key,enabled?'on':'off');paintButton();
-    if(!enabled){ambient.style.filter='';ambient.style.setProperty('--flow-x','50%');ambient.style.setProperty('--flow-y','50%');}
+    if(!enabled){
+      if(frameId)cancelAnimationFrame(frameId);
+      frameId=0;lastFrame=0;
+      ambient.style.filter='';
+      targetX=currentX=50;targetY=currentY=50;targetHue=currentHue=220;
+      ambient.style.setProperty('--flow-x','50%');
+      ambient.style.setProperty('--flow-y','50%');
+    }
   }
   button.addEventListener('click',()=>setEnabled(!enabled));
   document.body.append(button);
   document.body.insertBefore(ambient,document.body.firstChild);
   if(finePointer){
-    let lastHue=220;
     window.addEventListener('pointermove',e=>{
       if(!enabled||e.pointerType==='touch')return;
-      const x=Math.max(0,Math.min(100,e.clientX/Math.max(1,window.innerWidth)*100));
-      const y=Math.max(0,Math.min(100,e.clientY/Math.max(1,window.innerHeight)*100));
-      // Both axes move the colour field and influence its hue.
-      ambient.style.setProperty('--flow-x',x.toFixed(1)+'%');
-      ambient.style.setProperty('--flow-y',y.toFixed(1)+'%');
-      const hue=Math.round(178+x*.62+y*.56);
-      if(Math.abs(hue-lastHue)>=1){lastHue=hue;ambient.style.filter='hue-rotate('+(hue-220)+'deg)';}
+      targetX=Math.max(0,Math.min(100,e.clientX/Math.max(1,window.innerWidth)*100));
+      targetY=Math.max(0,Math.min(100,e.clientY/Math.max(1,window.innerHeight)*100));
+      targetHue=178+targetX*.62+targetY*.56;
+      requestFlowFrame();
     },{passive:true});
   }
   paintButton();
