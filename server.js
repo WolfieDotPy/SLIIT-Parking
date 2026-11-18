@@ -296,7 +296,7 @@ async function initializeDatabase() {
         AND conname='passes_student_id_fkey'
         AND contype='f'
     `);
-    if (!studentIdForeignKey.rows[0] || !/FOREIGN KEY \\(student_id\\) REFERENCES users\\(code\\)/i.test(studentIdForeignKey.rows[0].definition)) {
+    if (!studentIdForeignKey.rows[0] || !/FOREIGN KEY \(student_id\) REFERENCES users\(code\)/i.test(studentIdForeignKey.rows[0].definition)) {
       await pool.query('ALTER TABLE public.passes DROP CONSTRAINT IF EXISTS passes_student_id_fkey');
       await pool.query('ALTER TABLE public.passes ADD CONSTRAINT passes_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(code) ON DELETE CASCADE');
     }
