@@ -132,3 +132,26 @@ body::before,body::after{transition:opacity .5s ease}
  .support-compose{padding:9px;gap:7px}
  .support-compose .pill{padding:9px 12px}
 }
+
+/* Keep the theme control clear of dashboard content on phones. */
+@media(max-width:720px){
+  .theme-toggle{
+    top:auto!important;
+    right:16px!important;
+    bottom:calc(16px + env(safe-area-inset-bottom,0px))!important;
+    left:auto!important;
+    width:50px;
+    height:50px;
+    min-height:50px;
+    padding:0;
+    border-radius:50%;
+    font-size:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 5px 20px #232a6e44;
+  }
+  .theme-toggle::before{content:"☾";font-size:25px;line-height:1}
+  :root[data-theme="dark"] .theme-toggle::before{content:"☀"}
+  .toast{bottom:calc(78px + env(safe-area-inset-bottom,0px))}
+}
