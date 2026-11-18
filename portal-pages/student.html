@@ -97,7 +97,7 @@ async function home(){ME=await api('/api/student/me');const od=ME.overdue;
  let h=`<div class="glass pass"><div class="passcol"><img class="passimg" src="${PASSURL}" alt="Vehicle pass QR code"><button class="pill block" onclick="dlPassPdf()">Download Pass PDF</button></div>`+kv([['Status',lb[0],lb[1]],['Student ID',ME.code],['Vehicle No',ME.reg],['Vehicle Type',ME.type],['Pass Validity',fmtD(ME.expiry)]])+'</div>';
  if(ME.pendingPass)h+='<p class="center warn small">Your payment slip is awaiting verification. The QR code becomes active once the admin approves it.</p>';
  else if(!act)h+=`<p class="center bad small">${ME.lastPass&&ME.lastPass.status==='rejected'?'Your last payment was rejected: '+esc(ME.lastPass.reject_reason)+'. ':''}${ME.status==='EXPIRED'?'Your pass has expired. ':'Your QR code is inactive. '}Tap <b>Pay Fees</b>, choose <b>Vehicle Pass</b> and upload your payment slip to activate it.</p>`;
- $('#passbox').innerHTML=h;show('dash')}
+ $('#passbox').innerHTML=h;show('dash');initSupportChat()}
 async function hist(){const r=await api('/api/student/payments');
  $('#hl').innerHTML=r.map(p=>`<div class="row" style="cursor:default"><b>${money(p.amount)}</b><span>${fmtD(p.created_at)}</span><span class="sp small">${p.kind==='pass'?'Vehicle Pass':'Parking Fee'} - ${esc(p.vehicle_reg)}</span><a href="#" onclick="openSlip(${p.id});return false">View Upload</a>${st(p.status)}</div>${p.reject_reason?'<p class="bad small">Reason: '+esc(p.reject_reason)+'</p>':''}`).join('')||'<p class="center small">No payments yet.</p>';show('history')}
 let FEES=[];

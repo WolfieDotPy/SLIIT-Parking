@@ -77,3 +77,58 @@ body.mobile::after{background:radial-gradient(circle at 15% 8%,#142f60,transpare
 *,*::before,*::after{transition-property:background-color,color,border-color,box-shadow,filter;transition-duration:.45s;transition-timing-function:ease}
 body::before,body::after{transition:opacity .5s ease}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+
+/* Floating support chat */
+.support-launcher{position:fixed;left:18px;bottom:18px;z-index:9998;display:flex;align-items:center;gap:9px;box-shadow:0 5px 22px #232a6e35;background:rgba(255,255,255,.94)}
+.support-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:99px;background:#e84e65;color:#fff;font-size:11px;font-weight:800}
+.support-panel{position:fixed;left:18px;bottom:76px;z-index:9997;width:min(410px,calc(100vw - 36px));height:min(610px,calc(100dvh - 110px));min-height:300px;display:flex;flex-direction:column;overflow:hidden;border:1px solid #8d91df;border-radius:18px;background:rgba(250,250,255,.97);box-shadow:0 16px 50px #171b4a45;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);color:#232a6e}
+.support-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 17px;background:#292f82;color:#fff;flex:none}
+.support-head b{display:block;font-size:15px}.support-head small{color:#e1e4ff;opacity:.85;margin-top:2px}
+.support-close{border:0;background:transparent;color:#fff;font-size:27px;line-height:1;cursor:pointer;padding:0 3px}
+.support-messages{flex:1;min-height:0;overflow:auto;padding:15px;display:flex;flex-direction:column;gap:11px}
+.support-message{max-width:88%;display:flex;flex-direction:column;gap:3px}.support-message.mine{align-self:flex-end;align-items:flex-end}.support-message.theirs{align-self:flex-start;align-items:flex-start}
+.support-bubble{padding:10px 13px;border-radius:15px;background:#e6e8fb;color:#232a6e;line-height:1.45;overflow-wrap:anywhere;font-size:13px}
+.support-message.mine .support-bubble{background:#343b91;color:#fff;border-bottom-right-radius:5px}
+.support-message.theirs .support-bubble{border-bottom-left-radius:5px}
+.support-message small{font-size:10px;opacity:.65}
+.support-empty{margin:auto;text-align:center;max-width:260px;padding:20px;color:#7277a7;font-size:13px}
+.support-compose{display:flex;align-items:flex-end;gap:9px;padding:12px;border-top:1px solid #d7d9f4;background:rgba(255,255,255,.8);flex:none}
+.support-compose textarea{flex:1;min-width:0;resize:none;max-height:110px;border:1px solid #b8bce9;border-radius:14px;padding:10px 12px;background:#f0f1ff;color:#232a6e;font:inherit;font-size:13px;outline:none}
+.support-compose .pill{padding:10px 15px;white-space:nowrap}
+.support-inbox-view,.support-thread-view{flex:1;min-height:0;display:flex;flex-direction:column}
+.support-inbox{overflow:auto;padding:10px;flex:1}
+.support-inbox-item{width:100%;text-align:left;display:block;border:1px solid #d6d9f3;border-radius:12px;background:#fff;color:#232a6e;padding:11px 12px;margin-bottom:8px;cursor:pointer}
+.support-inbox-item.selected{border-color:#7774d9;background:#f0f0ff}
+.support-inbox-top{display:flex;justify-content:space-between;gap:8px;align-items:center}.support-inbox-top b{font-size:13px}
+.support-inbox-time{font-size:10px;opacity:.65;white-space:nowrap}
+.support-inbox-code{display:block;font-size:11px;color:#5f65b5;font-weight:700;margin-top:2px}
+.support-inbox-preview{display:block;font-size:12px;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:7px}
+.support-inbox-meta{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.support-state{font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;background:#fff0cf;color:#8b5a00}.support-state.resolved{background:#e2f5e8;color:#24713c}
+.support-unread{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:99px;background:#e84e65;color:#fff;font-size:10px;font-weight:800}
+.support-thread-head{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #d7d9f4;flex:none}
+.support-back{border:0;background:none;color:#343b91;font-weight:700;white-space:nowrap;cursor:pointer}
+.support-student-label{flex:1;min-width:0}.support-student-label b,.support-student-label small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.support-student-label b{font-size:12px}.support-student-label small{font-size:10px;color:#6268ae}
+.support-status{border:1px solid #aeb2e5;background:#f0f1ff;color:#343b91;border-radius:99px;padding:6px 9px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap}
+:root[data-theme="dark"] .support-launcher{background:#29234f;color:#ecebff;border-color:#7774d9}
+:root[data-theme="dark"] .support-panel{background:rgba(17,21,51,.98);border-color:#625eb8;color:#e1e4ff;box-shadow:0 16px 50px #0008}
+:root[data-theme="dark"] .support-head{background:#29275f}
+:root[data-theme="dark"] .support-bubble{background:#282d59;color:#e7e9ff}
+:root[data-theme="dark"] .support-message.mine .support-bubble{background:#48458f;color:#fff}
+:root[data-theme="dark"] .support-compose{background:#151a3b;border-color:#414879}
+:root[data-theme="dark"] .support-compose textarea{background:#171b3d;color:#eef0ff;border-color:#555b9e}
+:root[data-theme="dark"] .support-inbox-item{background:#171c40;border-color:#414879;color:#e1e4ff}
+:root[data-theme="dark"] .support-inbox-item.selected{background:#292c5c;border-color:#8584e8}
+:root[data-theme="dark"] .support-inbox-code,:root[data-theme="dark"] .support-student-label small{color:#b9baff}
+:root[data-theme="dark"] .support-thread-head{border-color:#414879}
+:root[data-theme="dark"] .support-back,:root[data-theme="dark"] .support-status{color:#dfe2ff}
+:root[data-theme="dark"] .support-status{background:#29234f;border-color:#7774d9}
+:root[data-theme="dark"] .support-empty{color:#a5a9cc}
+@media(max-width:600px){
+ .support-launcher{left:12px;bottom:12px;padding:10px 15px;font-size:13px}
+ .support-panel{left:8px;bottom:68px;width:calc(100vw - 16px);height:min(68dvh,600px);max-height:calc(100dvh - 88px)}
+ .support-compose{padding:9px;gap:7px}
+ .support-compose .pill{padding:9px 12px}
+}

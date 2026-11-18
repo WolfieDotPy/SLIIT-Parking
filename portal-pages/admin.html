@@ -38,7 +38,7 @@ function adminInputValue(c,value){
  return value;
 }
 async function doLogin(e){e.preventDefault();try{const r=await api('/api/admin/login',{method:'POST',json:{password:$('#lp').value}});localStorage[K]=r.token;dash()}catch(x){toast(x.message,1)}}
-function dash(){show('dash');tabs('#pt',[['','All'],['fee','Fees'],['pass','Passes']],v=>{KIND=v;load()});KIND='';load()}
+function dash(){show('dash');tabs('#pt',[['','All'],['fee','Fees'],['pass','Passes']],v=>{KIND=v;load()});KIND='';load();initSupportChat()}
 async function load(){LIST=await api('/api/admin/payments?view=pending&kind='+KIND);SEL=null;draw();detail(null)}
 function draw(){$('#pl').innerHTML=LIST.map((p,i)=>`<div class="row ${SEL===i?'sel':''}" onclick="pick(${i})"><b>${esc(p.student.code)}</b><span class="tag ${p.kind}">${p.kind==='pass'?'Pass':'Fee'}</span><span class="sp small">${money(p.amount)}</span>&rsaquo;</div>`).join('')||'<p class="center small">No pending payments</p>';$('#acts').classList.toggle('hidden',SEL===null)}
 function pick(i){SEL=i;draw();detail(LIST[i])}
