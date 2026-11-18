@@ -249,7 +249,7 @@ body>.ambient-flow-bg{
   pointer-events:none;
   opacity:0;
   --flow-x:50%;--flow-y:50%;
-  transition:opacity .7s ease,filter 1.4s cubic-bezier(.2,.7,.2,1),--flow-x 1.25s cubic-bezier(.2,.7,.2,1),--flow-y 1.25s cubic-bezier(.2,.7,.2,1);
+  transition:opacity .7s ease;
   background:
     radial-gradient(ellipse at 50% 48%,rgba(108,126,238,.13),transparent 58%),
     radial-gradient(ellipse at 18% 52%,rgba(137,112,231,.10),transparent 44%),
