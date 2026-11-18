@@ -138,7 +138,7 @@ body::before,body::after{transition:opacity .5s ease}
   .theme-toggle{
     top:auto!important;
     right:16px!important;
-    bottom:calc(16px + env(safe-area-inset-bottom,0px))!important;
+    bottom:12px!important;
     left:auto!important;
     width:50px;
     height:50px;
