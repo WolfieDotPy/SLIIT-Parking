@@ -110,6 +110,8 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   button.setAttribute('aria-pressed',enabled?'true':'false');
   button.setAttribute('aria-label',enabled?'Turn cursor animations off':'Turn cursor animations on');
   button.title=enabled?'Turn cursor animations off':'Turn cursor animations on';
+  const ambient=document.createElement('div');
+  ambient.className='ambient-flow-bg';ambient.setAttribute('aria-hidden','true');
   const canvas=document.createElement('canvas');
   canvas.className='cursor-flow-canvas';
   canvas.setAttribute('aria-hidden','true');
@@ -119,6 +121,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   let width=0,height=0,dpr=1,raf=0,lastMove=0,hasPointer=false;
   function paintButton(){
     const on=enabled;
+    root.dataset.animations=on?'on':'off';
     button.textContent=on?'✧ Effects on':'✧ Effects off';
     button.setAttribute('aria-pressed',on?'true':'false');
     button.setAttribute('aria-label',on?'Turn cursor animations off':'Turn cursor animations on');
@@ -181,7 +184,8 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   }
   button.addEventListener('click',()=>setEnabled(!enabled));
   document.body.append(button);
-  document.body.insertBefore(canvas,document.body.firstChild);
+  document.body.insertBefore(ambient,document.body.firstChild);
+  document.body.insertBefore(canvas,ambient.nextSibling);
   resize();window.addEventListener('resize',resize,{passive:true});
   if(finePointer)window.addEventListener('pointermove',e=>{
     if(!enabled||e.pointerType==='touch')return;
