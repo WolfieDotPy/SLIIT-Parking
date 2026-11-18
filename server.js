@@ -933,6 +933,13 @@ app.get('/api/admin/support/conversations', auth('admin'), wrap(async (_req, res
   const conversations = await all("SELECT c.id,c.status,c.updated_at,u.name AS student_name,u.code AS student_code,(SELECT m.body FROM support_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message,(SELECT m.sender_role FROM support_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_sender_role,(SELECT COUNT(*) FROM support_messages m WHERE m.conversation_id=c.id AND m.sender_role='student' AND (c.admin_last_read_at IS NULL OR m.created_at>c.admin_last_read_at)) AS unread_count FROM support_conversations c JOIN users u ON u.id=c.student_id ORDER BY (SELECT COUNT(*) FROM support_messages m WHERE m.conversation_id=c.id AND m.sender_role='student' AND (c.admin_last_read_at IS NULL OR m.created_at>c.admin_last_read_at)) DESC,c.updated_at DESC");
   res.json(conversations.map(c => ({ ...c, unread_count: Number(c.unread_count || 0) })));
 }));
+app.delete('/api/admin/support/conversations/:id', auth('admin'), wrap(async (req, res) => {
+  const conversation = await get('SELECT id FROM support_conversations WHERE id=?', [req.params.id]);
+  if (!conversation) fail('Conversation not found', 404);
+  // Existing ON DELETE CASCADE permanently removes all messages in this conversation.
+  await run('DELETE FROM support_conversations WHERE id=?', [conversation.id]);
+  res.json({ ok: true, deleted: true });
+}));
 app.get('/api/admin/support/conversations/:id', auth('admin'), wrap(async (req, res) => {
   const conversation = await get('SELECT c.id,c.status,c.updated_at,c.student_id,u.name AS student_name,u.code AS student_code FROM support_conversations c JOIN users u ON u.id=c.student_id WHERE c.id=?', [req.params.id]);
   if (!conversation) fail('Conversation not found', 404);

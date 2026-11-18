@@ -131,10 +131,23 @@ function supportToggle(force){
 }
 function supportShowInbox(){supportConversationId=null;$('#support-thread-view').classList.add('hidden');$('#support-inbox-view').classList.remove('hidden');supportLoadInbox();}
 function supportRenderInbox(){
- const box=$('#support-inbox');if(!box)return;
- box.innerHTML=supportInbox.map(c=>'<button type="button" class="support-inbox-item '+(Number(c.id)===Number(supportConversationId)?'selected':'')+'" data-conversation="'+Number(c.id)+'"><span class="support-inbox-top"><b>'+esc(c.student_name||'Student')+'</b><span class="support-inbox-time">'+esc(supportTime(c.updated_at))+'</span></span><span class="support-inbox-code">'+esc(c.student_code||'')+'</span><span class="support-inbox-preview">'+esc(c.last_message||'No messages yet')+'</span><span class="support-inbox-meta"><span class="support-state '+(c.status==='resolved'?'resolved':'')+'">'+(c.status==='resolved'?'Resolved':'Open')+'</span>'+(Number(c.unread_count)>0?'<span class="support-unread">'+Number(c.unread_count)+'</span>':'')+'</span></button>').join('')||'<div class="support-empty">No student conversations yet.</div>';
- box.querySelectorAll('[data-conversation]').forEach(b=>b.addEventListener('click',()=>supportOpenConversation(Number(b.dataset.conversation))));
- supportSetBadge(supportInbox.reduce((n,c)=>n+Number(c.unread_count||0),0));
+  const box=$('#support-inbox');if(!box)return;
+  box.innerHTML=supportInbox.map(c=>'<div class="support-inbox-row"><button type="button" class="support-inbox-item '+(Number(c.id)===Number(supportConversationId)?'selected':'')+'" data-conversation="'+Number(c.id)+'"><span class="support-inbox-top"><b>'+esc(c.student_name||'Student')+'</b><span class="support-inbox-time">'+esc(supportTime(c.updated_at))+'</span></span><span class="support-inbox-code">'+esc(c.student_code||'')+'</span><span class="support-inbox-preview">'+esc(c.last_message||'No messages yet')+'</span><span class="support-inbox-meta"><span class="support-state '+(c.status==='resolved'?'resolved':'')+'">'+(c.status==='resolved'?'Resolved':'Open')+'</span>'+(Number(c.unread_count)>0?'<span class="support-unread">'+Number(c.unread_count)+'</span>':'')+'</span></button><button type="button" class="support-delete-chat" data-delete-conversation="'+Number(c.id)+'" aria-label="Permanently delete chat with '+esc(c.student_name||'student')+'" title="Permanently delete chat">🗑</button></div>').join('')||'<div class="support-empty">No student conversations yet.</div>';
+  box.querySelectorAll('[data-conversation]').forEach(b=>b.addEventListener('click',()=>supportOpenConversation(Number(b.dataset.conversation))));
+  box.querySelectorAll('[data-delete-conversation]').forEach(b=>b.addEventListener('click',()=>supportDeleteConversation(Number(b.dataset.deleteConversation),b)));
+  supportSetBadge(supportInbox.reduce((n,c)=>n+Number(c.unread_count||0),0));
+}
+async function supportDeleteConversation(id,button){
+  const chat=supportInbox.find(c=>Number(c.id)===Number(id));
+  const label=chat?((chat.student_name||'Student')+' ('+(chat.student_code||'')+')'):'this student';
+  if(!confirm('Permanently delete the entire conversation with '+label+', including every message? This cannot be undone.'))return;
+  button.disabled=true;
+  try{
+    await api('/api/admin/support/conversations/'+id,{method:'DELETE'});
+    supportInbox=supportInbox.filter(c=>Number(c.id)!==Number(id));
+    supportRenderInbox();
+    toast('Conversation permanently deleted');
+  }catch(error){button.disabled=false;toast(error.message,1);}
 }
 async function supportLoadInbox(){
  if(P!=='admin'||!portalToken())return;
