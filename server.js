@@ -486,9 +486,9 @@ const pages = {
   admin: fs.readFileSync(path.join(__dirname, 'portal-pages', 'admin.html'), 'utf8'),
   enforcer: fs.readFileSync(path.join(__dirname, 'portal-pages', 'enforcer.html'), 'utf8')
 };
-app.get('/student', (_req, res) => res.redirect(308, '/student/'));
-app.get('/admin', (_req, res) => res.redirect(308, '/admin/'));
-app.get('/enforcer', (_req, res) => res.redirect(308, '/enforcer/'));
+app.get('/student', (_req, res) => res.type('html').send(pages.student));
+app.get('/admin', (_req, res) => res.type('html').send(pages.admin));
+app.get('/enforcer', (_req, res) => res.type('html').send(pages.enforcer));
 app.get('/student/', (_req, res) => res.type('html').send(pages.student));
 app.get('/admin/', (_req, res) => res.type('html').send(pages.admin));
 app.get('/enforcer/', (_req, res) => res.type('html').send(pages.enforcer));
