@@ -74,6 +74,12 @@ body.mobile::after{background:radial-gradient(circle at 15% 8%,#142f60,transpare
 :root[data-theme="dark"] .crest{background:#25295f;color:#f5c542}
 .theme-toggle{position:fixed;top:14px;right:14px;z-index:10000;min-height:42px;padding:8px 15px;background:rgba(255,255,255,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 4px 18px #232a6e22}
 :root[data-theme="dark"] .theme-toggle{background:rgba(34,34,77,.92);color:#f1efff;border-color:#7774d9;box-shadow:0 4px 18px #0005}
+@media(max-width:720px){
+  .theme-toggle{top:auto;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:50px;height:50px;min-height:50px;padding:0;border-radius:50%;font-size:0;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 20px #232a6e44}
+  .theme-toggle::before{content:"☾";font-size:25px;line-height:1}
+  :root[data-theme="dark"] .theme-toggle::before{content:"☀"}
+  .toast{bottom:calc(78px + env(safe-area-inset-bottom,0px))}
+}
 *,*::before,*::after{transition-property:background-color,color,border-color,box-shadow,filter;transition-duration:.45s;transition-timing-function:ease}
 body::before,body::after{transition:opacity .5s ease}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;scroll-behavior:auto!important}}
