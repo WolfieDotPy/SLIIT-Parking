@@ -95,7 +95,7 @@ function csv(){const t=[COLS.map(csvLabel),...TR.map(r=>COLS.map(c=>r[c]))].map(
 async function backup(){const r=await fetch('/api/admin/backup',{headers:{Authorization:'Bearer '+localStorage[K]}});if(!r.ok)return toast('Backup failed',1);const type=r.headers.get('content-type')||'',name=type.includes('application/json')?'sliit-parking-backup.json':'sliit-parking-backup.db';dl(await r.blob(),name)}
 const EXTRA={students:['vehicle','vehicle_type','password','pass_end'],enforcers:['password'],vehicles:['student'],passes:['student'],fees:['enforcer']};
 const TPL={
- students:{h:'code,name,contact,vehicle,vehicle_type,password,pass_end',r:'IT26123567,Example Student,0771234567,CCC-6767,Car,changeme1,2027-07-05',d:'columns: code, name, contact, vehicle, vehicle_type, password (blank = IT number), pass_end (optional, gives an active pass until that date).'},
+ students:{h:'code,name,contact,vehicle,vehicle_type,password,pass_end',r:'IT26123567,Example Student,0771234567,CCC-6767,Car,changeme1,2027-07-05',d:'columns: code, name, contact, vehicle, vehicle_type (Car or Motorcycle), password (blank = Student ID Number), pass_end (optional, gives an active pass until that date).'},
  enforcers:{h:'name,contact,password,code',r:'Example Enforcer,0771234567,secret123,',d:'columns: name, contact, password (min 6, required), code (optional - blank gives the next EN number).'},
  vehicles:{h:'student,reg_number,type',r:'IT26123567,CCC-6767,Car',d:'columns: student (IT number, must exist), reg_number, type. One vehicle per student.'},
  passes:{h:'student,start_date,end_date',r:'IT26123567,2026-07-05,2027-07-05',d:'columns: student (IT number, must exist), end_date (required), start_date (optional).'},
