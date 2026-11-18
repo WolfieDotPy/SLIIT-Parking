@@ -181,26 +181,20 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   }
   button.addEventListener('click',()=>setEnabled(!enabled));
   document.body.append(button);
-  if(finePointer){
-    document.body.insertBefore(canvas,document.body.firstChild);
-    resize();window.addEventListener('resize',resize,{passive:true});
-    window.addEventListener('pointermove',e=>{
-      if(!enabled||e.pointerType==='touch')return;
-      points[0].x=e.clientX;points[0].y=e.clientY;
-      if(!hasPointer)points.forEach(p=>{p.x=e.clientX;p.y=e.clientY});
-      hasPointer=true;lastMove=performance.now();start();
-    },{passive:true});
-    window.addEventListener('click',e=>{
-      if(!enabled)return;
-      ripples.push({x:e.clientX,y:e.clientY,time:performance.now()});
-      if(ripples.length>5)ripples.shift();
-      start();
-    },{passive:true});
-  }else{
-    button.disabled=true;
-    button.title='Cursor animations are available on devices with a mouse or trackpad';
-    button.setAttribute('aria-label',button.title);
-  }
+  document.body.insertBefore(canvas,document.body.firstChild);
+  resize();window.addEventListener('resize',resize,{passive:true});
+  if(finePointer)window.addEventListener('pointermove',e=>{
+    if(!enabled||e.pointerType==='touch')return;
+    points[0].x=e.clientX;points[0].y=e.clientY;
+    if(!hasPointer)points.forEach(p=>{p.x=e.clientX;p.y=e.clientY});
+    hasPointer=true;lastMove=performance.now();start();
+  },{passive:true});
+  window.addEventListener('click',e=>{
+    if(!enabled)return;
+    ripples.push({x:e.clientX,y:e.clientY,time:performance.now()});
+    if(ripples.length>5)ripples.shift();
+    start();
+  },{passive:true});
   paintButton();
 })();
 
