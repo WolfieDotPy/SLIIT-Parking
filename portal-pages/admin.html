@@ -90,7 +90,8 @@ async function delR(id){if(!confirm(TB==='students'?'Delete this student and the
  try{await api(`/api/admin/table/${TB}/${id}`,{method:'DELETE'});toast('Deleted');showT(TB)}catch(x){toast(x.message,1)}}
 async function grant(){try{await api('/api/admin/passes',{method:'POST',json:{code:$('#gc').value,start_date:$('#gs').value,end_date:$('#ge').value}});toast('Pass added');showT('passes')}catch(x){toast(x.message,1)}}
 function dl(b,n){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;a.click()}
-function csv(){const t=[COLS,...TR.map(r=>COLS.map(c=>r[c]))].map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');dl(new Blob(['\\ufeff'+t],{type:'text/csv'}),TB+'.csv')}
+function csvLabel(c){return c.split('_').map(w=>w.toLowerCase()==='id'?'ID':w.charAt(0).toUpperCase()+w.slice(1)).join(' ')}
+function csv(){const t=[COLS.map(csvLabel),...TR.map(r=>COLS.map(c=>r[c]))].map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');dl(new Blob(['\ufeff'+t],{type:'text/csv'}),TB+'.csv')}
 async function backup(){const r=await fetch('/api/admin/backup',{headers:{Authorization:'Bearer '+localStorage[K]}});if(!r.ok)return toast('Backup failed',1);const type=r.headers.get('content-type')||'',name=type.includes('application/json')?'sliit-parking-backup.json':'sliit-parking-backup.db';dl(await r.blob(),name)}
 const EXTRA={students:['vehicle','vehicle_type','password','pass_end'],enforcers:['password'],vehicles:['student'],passes:['student'],fees:['enforcer']};
 const TPL={
