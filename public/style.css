@@ -5,6 +5,32 @@ body.mobile{background:radial-gradient(circle at 15% 8%,#7db4ff,transparent 45%)
 .wrap{max-width:960px;margin:0 auto;padding:22px 14px}.mobile .wrap{max-width:430px}
 /* Let portal content grow on wide displays while keeping mobile layouts edge-to-edge. */
 @media(min-width:961px){
+  .wrap,.mobile .wrap{width:max(960px,75vw);max-width:1600px;padding:30px 22px}
+  body{font-size:17px}
+  h1{font-size:38px}
+  h3{font-size:20px;margin:6px 0 11px}
+  .glass{padding:23px;margin-bottom:18px;border-radius:18px}
+  .grid2{gap:0 20px}
+  .grid3,.split{gap:18px}
+  .sub{font-size:15px;margin-bottom:13px}
+  label{font-size:13px;margin:13px 0 5px}
+  input,select{font-size:15px;padding:12px 16px}
+  .pill{font-size:15px;padding:11px 24px}
+  .small{font-size:13px}
+  small{font-size:12px}
+  .kv2{gap:13px 18px}
+  .kv2 b{font-size:16px}
+  .tabs{padding:4px;margin-bottom:13px}
+  .tabs button{font-size:14px;padding:8px}
+  .row{font-size:14px;padding:12px 14px;margin-bottom:9px}
+  .tag{font-size:12px;padding:3px 9px}
+  table{font-size:14px}
+  th,td{padding:9px}
+  .pass img.qr{width:170px;height:170px}
+  .scan{min-height:190px;padding:14px}
+  .fee-card{padding:20px;margin-bottom:18px}
+}
+@media(min-width:961px){
   .wrap,.mobile .wrap{width:max(960px,70vw);max-width:none}
 }
 @media(max-width:960px){
