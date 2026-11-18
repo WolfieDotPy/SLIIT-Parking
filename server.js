@@ -1,225 +1,56 @@
-const express=require('express'),bcrypt=require('bcryptjs'),jwt=require('jsonwebtoken'),multer=require('multer'),QRCode=require('qrcode'),crypto=require('crypto'),path=require('path'),fs=require('fs');
-const {DatabaseSync}=require('node:sqlite');
-const SECRET=process.env.JWT_SECRET||'change-this-secret';
-const UP=path.join(__dirname,'uploads'),PUB=path.join(__dirname,'public');
-fs.mkdirSync(UP,{recursive:true});
-const DBF=path.join(__dirname,'sliit-parking.db'),raw=new DatabaseSync(DBF);
-const db={exec:x=>raw.exec(x),prepare:x=>raw.prepare(x),transaction:f=>()=>{raw.exec('BEGIN');try{const r=f();raw.exec('COMMIT');return r}catch(e){raw.exec('ROLLBACK');throw e}}};
-db.exec(`
-CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,role TEXT NOT NULL,code TEXT UNIQUE,name TEXT,contact TEXT,password_hash TEXT,qr_token TEXT UNIQUE,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS vehicles(id INTEGER PRIMARY KEY,user_id INTEGER UNIQUE,reg_number TEXT UNIQUE,type TEXT);
-CREATE TABLE IF NOT EXISTS passes(id INTEGER PRIMARY KEY,user_id INTEGER,start_date TEXT,end_date TEXT,payment_id INTEGER);
-CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY,user_id INTEGER,kind TEXT,fee_id INTEGER,vehicle_reg TEXT,vehicle_type TEXT,amount REAL,slip_file TEXT,status TEXT DEFAULT 'pending',reject_reason TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,reviewed_at TEXT);
-CREATE TABLE IF NOT EXISTS fees(id INTEGER PRIMARY KEY,vehicle_reg TEXT,user_id INTEGER,enforcer_id INTEGER,start_time TEXT,end_time TEXT,hours INTEGER,amount REAL,status TEXT,reason TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT);`);
-const seed=(k,v)=>db.prepare('INSERT OR IGNORE INTO settings VALUES(?,?)').run(k,String(v));
-seed('hourly_rate',100);seed('pass_price',5000);seed('grace_minutes',15);seed('plan_days',365);seed('bank_info','Bank details not set yet - admin can add them in Settings.');
-if(!db.prepare("SELECT 1 FROM users WHERE role='admin'").get())db.prepare("INSERT INTO users(role,code,name,password_hash) VALUES('admin','ADMIN','Admin',?)").run(bcrypt.hashSync(process.env.ADMIN_PASSWORD||'admin123',10));
-
-const S=()=>Object.fromEntries(db.prepare('SELECT * FROM settings').all().map(r=>[r.key,r.value]));
+const express=require('express'),bcrypt=require('bcryptjs'),jwt=require('jsonwebtoken'),multer=require('multer'),QRCode=require('qrcode'),crypto=require('crypto'),path=require('path');
+const {Pool}=require('pg');
+const {createClient}=require('@supabase/supabase-js');
+const required=['DATABASE_URL','JWT_SECRET','SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'];
+const missing=required.filter(k=>!process.env[k]);
+if(missing.length)console.error('[startup] Missing environment variables:',missing.join(', '));
+const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_URL?{rejectUnauthorized:false}:undefined,max:5,idleTimeoutMillis:10000,connectionTimeoutMillis:10000});
+const storage=process.env.SUPABASE_URL&&process.env.SUPABASE_SERVICE_ROLE_KEY?createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}}).storage.from('payment-slips'):null;
+const app=express(),PUB=path.join(__dirname,'public'),SECRET=process.env.JWT_SECRET;
+const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:5*1024*1024},fileFilter:(_q,f,cb)=>cb(null,['image/jpeg','image/png','application/pdf'].includes(f.mimetype))});
+app.disable('x-powered-by');app.use(express.json({limit:'1mb'}));app.use(express.urlencoded({extended:true}));app.use(express.static(PUB,{index:false,maxAge:'1h'}));
+app.get('/student/',(_q,s)=>s.sendFile(path.join(PUB,'student','index.html')));
+app.get('/admin/',(_q,s)=>s.sendFile(path.join(PUB,'admin','index.html')));
+app.get('/enforcer/',(_q,s)=>s.sendFile(path.join(PUB,'enforcer','index.html')));
 const fail=(m,c=400)=>{const e=new Error(m);e.status=c;throw e};
-const wrap=f=>async(q,s)=>{try{await f(q,s)}catch(e){if(q.file)fs.unlink(q.file.path,()=>{});s.status(e.status||400).json({error:e.message})}};
-const auth=role=>(q,s,n)=>{try{q.user=jwt.verify((q.headers.authorization||'').replace('Bearer ',''),SECRET)}catch{return s.status(401).json({error:'Please log in'})}
-  if(q.user.role!==role)return s.status(403).json({error:'This account cannot use this portal'});n()};
-const normReg=r=>(r||'').toUpperCase().replace(/\s/g,'');
-const upload=multer({storage:multer.diskStorage({destination:UP,filename:(q,f,cb)=>cb(null,crypto.randomUUID()+path.extname(f.originalname).toLowerCase())}),
-  limits:{fileSize:5*1024*1024},fileFilter:(q,f,cb)=>cb(null,/\.(jpe?g|png|pdf)$/i.test(f.originalname))});
-const passOf=id=>{const e=db.prepare('SELECT MAX(end_date) e FROM passes WHERE user_id=?').get(id).e;return e?{status:new Date(e)>=new Date()?'ACTIVE':'EXPIRED',expiry:e}:{status:'NONE',expiry:null}};
-const profile=id=>{const u=db.prepare('SELECT code,name,contact FROM users WHERE id=?').get(id);if(!u)return null;
-  const v=db.prepare('SELECT reg_number reg,type FROM vehicles WHERE user_id=?').get(id)||{};
-  const od=db.prepare("SELECT COUNT(*) n,COALESCE(SUM(amount),0) t FROM fees WHERE user_id=? AND status='unpaid'").get(id);
-  return{code:u.code,name:u.name,contact:u.contact,reg:v.reg,type:v.type,...passOf(id),overdue:{n:od.n,total:od.t}}};
-const enfInfo=id=>{const u=db.prepare('SELECT code,name,contact FROM users WHERE id=?').get(id);return u&&{...u,count:db.prepare("SELECT COUNT(*) n FROM fees WHERE enforcer_id=? AND status!='draft'").get(id).n}};
-const slip=role=>wrap((q,s)=>{const p=db.prepare('SELECT slip_file,user_id FROM payments WHERE id=?').get(q.params.id);
-  if(!p||(role==='student'&&p.user_id!==q.user.id))fail('Not found',404);s.sendFile(path.join(UP,p.slip_file))});
-
-const app=express();app.use(express.json());
-app.get('/',(q,s)=>s.redirect('/student/'));app.use(express.static(PUB));
-
-// ---------- login (one endpoint per portal; each only accepts its own role)
-const login=role=>wrap((q,s)=>{const code=role==='admin'?'ADMIN':(q.body.code||'').trim().toUpperCase().replace(/[\s-]/g,'');
-  const u=db.prepare('SELECT * FROM users WHERE role=? AND code=?').get(role,code);
-  if(!u||!bcrypt.compareSync(q.body.password||'',u.password_hash))fail(role==='admin'?'Wrong password':'Wrong ID or password',401);
-  s.json({token:jwt.sign({id:u.id,role},SECRET,{expiresIn:'12h'}),name:u.name})});
-['student','admin','enforcer'].forEach(r=>app.post(`/api/${r}/login`,login(r)));
-
-// ---------- STUDENT
-app.get('/api/student/info',wrap((q,s)=>{const c=S();s.json({pass_price:c.pass_price,bank_info:c.bank_info,plan_days:c.plan_days})}));
-app.post('/api/student/register',upload.single('slip'),wrap((q,s)=>{
-  const b=q.body,code=(b.code||'').trim().toUpperCase().replace(/[\s-]/g,''),reg=normReg(b.vehicle_reg);
-  if(!/^[A-Z0-9]{6,12}$/.test(code))fail('Enter a valid student registration number (e.g. IT26123567)');
-  if(!(b.name||'').trim()||!(b.contact||'').trim()||!reg||!b.vehicle_type)fail('Please fill in every field');
-  if((b.password||'').length<6)fail('Password must be at least 6 characters');
-  if(b.password!==b.confirm)fail('Passwords do not match');
-  if(!q.file)fail('Please upload your payment slip (JPG, PNG or PDF, max 5MB)');
-  if(db.prepare('SELECT 1 FROM users WHERE code=?').get(code))fail('This student number is already registered');
-  if(db.prepare('SELECT 1 FROM vehicles WHERE reg_number=?').get(reg))fail('This vehicle number is already registered');
-  db.transaction(()=>{const id=db.prepare("INSERT INTO users(role,code,name,contact,password_hash,qr_token) VALUES('student',?,?,?,?,?)").run(code,b.name.trim(),b.contact.trim(),bcrypt.hashSync(b.password,10),crypto.randomUUID()).lastInsertRowid;
-    db.prepare('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)').run(id,reg,b.vehicle_type);
-    db.prepare("INSERT INTO payments(user_id,kind,vehicle_reg,vehicle_type,amount,slip_file) VALUES(?,'pass',?,?,?,?)").run(id,reg,b.vehicle_type,S().pass_price,q.file.filename)})();
-  s.json({ok:true})}));
-app.get('/api/student/me',auth('student'),wrap((q,s)=>{
-  s.json({...profile(q.user.id),
-    pendingPass:!!db.prepare("SELECT 1 FROM payments WHERE user_id=? AND kind='pass' AND status='pending'").get(q.user.id),
-    lastPass:db.prepare("SELECT status,reject_reason FROM payments WHERE user_id=? AND kind='pass' ORDER BY id DESC").get(q.user.id)||null})}));
-app.get('/api/student/qr',auth('student'),wrap(async(q,s)=>{if(passOf(q.user.id).status==='NONE')fail('No pass yet',403);
-  s.json({qr:await QRCode.toDataURL(db.prepare('SELECT qr_token FROM users WHERE id=?').get(q.user.id).qr_token,{width:300,margin:1})})}));
-app.get('/api/student/payments',auth('student'),wrap((q,s)=>{s.json(db.prepare('SELECT id,kind,vehicle_reg,amount,status,reject_reason,created_at FROM payments WHERE user_id=? ORDER BY id DESC').all(q.user.id))}));
-app.get('/api/student/fees',auth('student'),wrap((q,s)=>{s.json(db.prepare("SELECT id,vehicle_reg,amount,end_time FROM fees WHERE user_id=? AND status='unpaid' ORDER BY id DESC").all(q.user.id))}));
-app.get('/api/student/fees/lookup',auth('student'),wrap((q,s)=>{s.json(db.prepare("SELECT id,vehicle_reg,amount,end_time FROM fees WHERE vehicle_reg=? AND status='unpaid' AND (user_id IS NULL OR user_id=?)").all(normReg(q.query.reg),q.user.id))}));
-app.post('/api/student/pay',auth('student'),upload.single('slip'),wrap((q,s)=>{
-  const uid=q.user.id,b=q.body;if(!q.file)fail('Please upload your payment slip (JPG, PNG or PDF, max 5MB)');
-  if(b.kind==='fee'){const f=db.prepare("SELECT * FROM fees WHERE id=? AND status='unpaid'").get(b.fee_id);
-    if(!f||(f.user_id&&f.user_id!==uid))fail('Fee not found or already paid');
-    db.transaction(()=>{db.prepare("INSERT INTO payments(user_id,kind,fee_id,vehicle_reg,amount,slip_file) VALUES(?,'fee',?,?,?,?)").run(uid,f.id,f.vehicle_reg,f.amount,q.file.filename);
-      db.prepare("UPDATE fees SET status='pending' WHERE id=?").run(f.id)})();
-  }else if(b.kind==='pass'){const reg=normReg(b.vehicle_reg);if(!reg||!b.vehicle_type)fail('Vehicle number and type are required');
-    if(db.prepare("SELECT 1 FROM payments WHERE user_id=? AND kind='pass' AND status='pending'").get(uid))fail('Your previous pass payment is still awaiting verification');
-    if(db.prepare('SELECT 1 FROM vehicles WHERE reg_number=? AND user_id!=?').get(reg,uid))fail('That vehicle number belongs to another student');
-    db.prepare("INSERT INTO payments(user_id,kind,vehicle_reg,vehicle_type,amount,slip_file) VALUES(?,'pass',?,?,?,?)").run(uid,reg,b.vehicle_type,S().pass_price,q.file.filename);
-  }else fail('Invalid payment type');
-  s.json({ok:true})}));
-app.get('/api/student/slip/:id',auth('student'),slip('student'));
-
-// ---------- ADMIN
-const payRow=p=>{const f=p.fee_id?db.prepare('SELECT * FROM fees WHERE id=?').get(p.fee_id):null;
-  return{...p,slip_file:undefined,student:profile(p.user_id),enforcer:f&&f.enforcer_id?enfInfo(f.enforcer_id):null}};
-app.get('/api/admin/payments',auth('admin'),wrap((q,s)=>{let sql=`SELECT * FROM payments WHERE status ${q.query.view==='history'?'!=':'='} 'pending'`;const a=[];
-  if(q.query.kind==='fee'||q.query.kind==='pass'){sql+=' AND kind=?';a.push(q.query.kind)}
-  s.json(db.prepare(sql+' ORDER BY id DESC').all(...a).map(payRow))}));
-app.patch('/api/admin/payments/:id/approve',auth('admin'),wrap((q,s)=>{
-  const p=db.prepare("SELECT * FROM payments WHERE id=? AND status='pending'").get(q.params.id);if(!p)fail('Payment is not pending',404);
-  db.transaction(()=>{const now=new Date();
-    if(p.kind==='pass'){const cur=passOf(p.user_id),start=cur.expiry&&new Date(cur.expiry)>now?new Date(cur.expiry):now,end=new Date(start.getTime()+Number(S().plan_days)*864e5);
-      db.prepare('UPDATE vehicles SET reg_number=?,type=? WHERE user_id=?').run(p.vehicle_reg,p.vehicle_type,p.user_id);
-      db.prepare('INSERT INTO passes(user_id,start_date,end_date,payment_id) VALUES(?,?,?,?)').run(p.user_id,start.toISOString(),end.toISOString(),p.id)
-    }else db.prepare("UPDATE fees SET status='paid' WHERE id=?").run(p.fee_id);
-    db.prepare("UPDATE payments SET status='approved',reviewed_at=? WHERE id=?").run(now.toISOString(),p.id)})();
-  s.json({ok:true})}));
-app.patch('/api/admin/payments/:id/reject',auth('admin'),wrap((q,s)=>{
-  const p=db.prepare("SELECT * FROM payments WHERE id=? AND status='pending'").get(q.params.id);if(!p)fail('Payment is not pending',404);
-  db.transaction(()=>{db.prepare("UPDATE payments SET status='rejected',reject_reason=?,reviewed_at=? WHERE id=?").run(q.body.reason||'Rejected',new Date().toISOString(),p.id);
-    if(p.fee_id)db.prepare("UPDATE fees SET status='unpaid' WHERE id=?").run(p.fee_id)})();s.json({ok:true})}));
-app.get('/api/admin/slip/:id',auth('admin'),slip('admin'));
-app.post('/api/admin/enforcers',auth('admin'),wrap((q,s)=>{const b=q.body;
-  if(!(b.name||'').trim()||!(b.contact||'').trim())fail('Name and contact details are required');
-  if((b.password||'').length<6)fail('Password must be at least 6 characters');if(b.password!==b.confirm)fail('Passwords do not match');
-  const code=nextEnfCode();
-  db.prepare("INSERT INTO users(role,code,name,contact,password_hash) VALUES('enforcer',?,?,?,?)").run(code,b.name.trim(),b.contact.trim(),bcrypt.hashSync(b.password,10));s.json({code})}));
-app.get('/api/admin/settings',auth('admin'),wrap((q,s)=>s.json(S())));
-app.put('/api/admin/settings',auth('admin'),wrap((q,s)=>{const b=q.body;
-  for(const k of['hourly_rate','pass_price','grace_minutes','plan_days'])if(b[k]!==undefined){if(b[k]===''||isNaN(b[k])||b[k]<0)fail('Invalid value for '+k);db.prepare('INSERT OR REPLACE INTO settings VALUES(?,?)').run(k,String(b[k]))}
-  if(b.bank_info!==undefined)db.prepare('INSERT OR REPLACE INTO settings VALUES(?,?)').run('bank_info',String(b.bank_info));
-  if(b.new_password){if(b.new_password.length<6)fail('New password must be at least 6 characters');db.prepare("UPDATE users SET password_hash=? WHERE role='admin'").run(bcrypt.hashSync(b.new_password,10))}
-  s.json(S())}));
-// ---------- ADMIN: full data access (view / edit / delete / export / backup)
-const TABLES={
- students:{t:'users',w:"role='student'",cols:['code','name','contact'],sel:'id,code,name,contact,created_at'},
- enforcers:{t:'users',w:"role='enforcer'",cols:['code','name','contact'],sel:'id,code,name,contact,created_at'},
- vehicles:{t:'vehicles',cols:['reg_number','type'],sel:'id,user_id,reg_number,type'},
- passes:{t:'passes',cols:['start_date','end_date'],sel:'id,user_id,start_date,end_date,payment_id'},
- fees:{t:'fees',cols:['vehicle_reg','start_time','end_time','hours','amount','status','reason'],sel:'id,vehicle_reg,user_id,enforcer_id,start_time,end_time,hours,amount,status,reason,created_at'},
- payments:{t:'payments',cols:['kind','vehicle_reg','vehicle_type','amount','status','reject_reason'],sel:'id,user_id,kind,fee_id,vehicle_reg,vehicle_type,amount,status,reject_reason,created_at'}};
-const tbl=n=>TABLES[n]||fail('Unknown table',404);
-const DATES=['start_date','end_date','start_time','end_time'],NUMS=['hours','amount'];
-app.get('/api/admin/table/:name',auth('admin'),wrap((q,s)=>{const T=tbl(q.params.name);
-  s.json({cols:T.sel.split(','),editable:T.cols,rows:db.prepare(`SELECT ${T.sel} FROM ${T.t}${T.w?' WHERE '+T.w:''} ORDER BY id DESC`).all()})}));
-const updateRow=(T,id,body)=>{const sets=[],vals=[];
-  for(const c of T.cols){let v=body[c];if(v===undefined)continue;
-    if(v===''||v===null)v=null;
-    else if(DATES.includes(c)){const d=new Date(v);if(isNaN(d))fail('Invalid date in '+c);v=d.toISOString()}
-    else if(NUMS.includes(c)){if(isNaN(v))fail(c+' must be a number');v=Number(v)}
-    else if(c==='code')v=String(v).trim().toUpperCase();
-    else if(c==='reg_number'||c==='vehicle_reg')v=normReg(v);
-    sets.push(c+'=?');vals.push(v)}
-  if(T.t==='users'&&body.new_password){if(body.new_password.length<6)fail('Password must be at least 6 characters');sets.push('password_hash=?');vals.push(bcrypt.hashSync(body.new_password,10))}
-  if(!sets.length)fail('Nothing to change');
-  let r;try{r=db.prepare(`UPDATE ${T.t} SET ${sets.join(',')} WHERE id=?${T.w?' AND '+T.w:''}`).run(...vals,id)}catch{fail('Could not save - a value is invalid or already in use')}
-  if(!r.changes)fail('Row not found',404)};
-app.put('/api/admin/table/:name/:id',auth('admin'),wrap((q,s)=>{updateRow(tbl(q.params.name),q.params.id,q.body);s.json({ok:true})}));
-const addStudent=r=>{const code=String(r.code||'').trim().toUpperCase().replace(/[\s-]/g,''),reg=normReg(r.vehicle);
-  if(!/^[A-Z0-9]{3,20}$/.test(code))fail('student number is missing or invalid (got "'+String(r.code||'')+'"; use letters and numbers only, 3-20 characters)');
-  if(!String(r.name||'').trim())fail('name is required');
-  const given=String(r.password||'').trim(),pw=given||code;if(given&&given.length<6)fail('password must be at least 6 characters');
-  if(db.prepare('SELECT 1 FROM users WHERE code=?').get(code))fail('student '+code+' already exists');
-  if(reg&&db.prepare('SELECT 1 FROM vehicles WHERE reg_number=?').get(reg))fail('vehicle '+reg+' is already registered');
-  let end=null;if(r.pass_end){end=new Date(r.pass_end);if(isNaN(end))fail('pass_end is not a valid date (use YYYY-MM-DD)')}
-  const id=db.prepare("INSERT INTO users(role,code,name,contact,password_hash,qr_token) VALUES('student',?,?,?,?,?)").run(code,String(r.name).trim(),String(r.contact||'').trim()||null,bcrypt.hashSync(pw,10),crypto.randomUUID()).lastInsertRowid;
-  if(reg)db.prepare('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)').run(id,reg,r.vehicle_type||'Car');
-  if(end)db.prepare('INSERT INTO passes(user_id,start_date,end_date) VALUES(?,?,?)').run(id,new Date(end.getTime()-Number(S().plan_days)*864e5).toISOString(),end.toISOString());return !String(r.password||'').trim()};
-const studentId=c=>{const u=db.prepare("SELECT id FROM users WHERE role='student' AND code=?").get(String(c||'').trim().toUpperCase().replace(/[\s-]/g,''));if(!u)fail('student "'+(c||'')+'" not found - add the student first');return u.id};
-const addVehicle=r=>{const id=studentId(r.student),reg=normReg(r.reg_number);if(!reg)fail('reg_number is required');
-  if(db.prepare('SELECT 1 FROM vehicles WHERE user_id=?').get(id))fail('that student already has a vehicle - edit the existing row instead');
-  if(db.prepare('SELECT 1 FROM vehicles WHERE reg_number=?').get(reg))fail('vehicle '+reg+' is already registered');
-  db.prepare('INSERT INTO vehicles(user_id,reg_number,type) VALUES(?,?,?)').run(id,reg,r.type||'Car')};
-const addPass=r=>{const id=studentId(r.student),end=new Date(r.end_date);if(!r.end_date||isNaN(end))fail('end_date is required (YYYY-MM-DD)');
-  const start=r.start_date?new Date(r.start_date):new Date(end.getTime()-Number(S().plan_days)*864e5);
-  if(isNaN(start)||end<=start)fail('start_date must be a valid date before end_date');
-  db.prepare('INSERT INTO passes(user_id,start_date,end_date) VALUES(?,?,?)').run(id,start.toISOString(),end.toISOString())};
-const nextEnfCode=()=>'EN'+String(Math.max(0,...db.prepare("SELECT code FROM users WHERE role='enforcer'").all().map(u=>parseInt(String(u.code).replace(/\D/g,''))||0))+1).padStart(3,'0');
-const addEnforcer=r=>{if(!String(r.name||'').trim())fail('name is required');const pw=String(r.password||'').trim();if(pw.length<6)fail('password (at least 6 characters) is required');
-  const code=String(r.code||'').trim().toUpperCase().replace(/[\s-]/g,'')||nextEnfCode();
-  if(db.prepare('SELECT 1 FROM users WHERE code=?').get(code))fail('code '+code+' is already used');
-  db.prepare("INSERT INTO users(role,code,name,contact,password_hash) VALUES('enforcer',?,?,?,?)").run(code,String(r.name).trim(),String(r.contact||'').trim()||null,bcrypt.hashSync(pw,10))};
-const num=v=>v===''||v==null?null:Number(v);
-const addFee=r=>{const reg=normReg(r.vehicle_reg);if(!reg)fail('vehicle_reg is required');
-  const st=String(r.status||'unpaid').toLowerCase();if(!['unpaid','paid'].includes(st))fail('status must be unpaid or paid');
-  const a=r.start_time?new Date(r.start_time):null,b=r.end_time?new Date(r.end_time):null;if((a&&isNaN(a))||(b&&isNaN(b)))fail('start_time / end_time is not a valid date');
-  let hours=num(r.hours),amount=num(r.amount);if((hours!==null&&isNaN(hours))||(amount!==null&&isNaN(amount)))fail('hours and amount must be numbers');
-  if(amount===null){if(!a||!b||b<=a)fail('amount is required (or give start_time and end_time so it can be calculated)');
-    const c=S(),mins=(b-a)/6e4;hours=mins<=Number(c.grace_minutes)?0:Math.ceil(mins/60);amount=hours*Number(c.hourly_rate)}
-  const v=db.prepare('SELECT user_id FROM vehicles WHERE reg_number=?').get(reg);let enf=null;
-  if(String(r.enforcer||'').trim()){const e=db.prepare("SELECT id FROM users WHERE role='enforcer' AND code=?").get(String(r.enforcer).trim().toUpperCase());if(!e)fail('enforcer '+r.enforcer+' not found');enf=e.id}
-  db.prepare('INSERT INTO fees(vehicle_reg,user_id,enforcer_id,start_time,end_time,hours,amount,status,reason) VALUES(?,?,?,?,?,?,?,?,?)').run(reg,v?v.user_id:null,enf,a?a.toISOString():null,b?b.toISOString():null,hours,amount,st,r.reason||(v?passOf(v.user_id).status:'UNREGISTERED'))};
-const ADDERS={students:addStudent,enforcers:addEnforcer,vehicles:addVehicle,passes:addPass,fees:addFee};
-// Import: rows whose id exists update that row; other rows are added as new (not possible for payments). All-or-nothing.
-app.post('/api/admin/table/:name/import',auth('admin'),wrap((q,s)=>{const T=tbl(q.params.name),rows=q.body.rows,add=ADDERS[q.params.name];
-  if(!Array.isArray(rows)||!rows.length)fail('No rows found in the file');let updated=0,added=0,defaulted=0;
-  try{db.transaction(()=>{rows.forEach((r,i)=>{const hasId=r.id!==undefined&&String(r.id).trim()!=='';
-    try{const exists=hasId&&db.prepare(`SELECT 1 FROM ${T.t} WHERE id=?${T.w?' AND '+T.w:''}`).get(r.id);
-      if(exists){if(T.t==='users'&&r.password)r.new_password=r.password;if(!T.cols.some(c=>c in r)&&!r.new_password)return;updateRow(T,r.id,r);updated++}
-      else if(add){if(add(r))defaulted++;added++}
-      else fail(hasId?'id '+r.id+' does not exist in this table':'new rows cannot be added to this table (only existing rows can be updated)')}
-    catch(e){e.message=`Row ${r._row||i+2}: `+e.message;throw e}})})()}
-  catch(e){fail(e.message+' - nothing was changed')}
-  s.json({updated,added,defaulted})}));
-app.delete('/api/admin/table/:name/:id',auth('admin'),wrap((q,s)=>{const T=tbl(q.params.name),id=q.params.id;
-  const row=db.prepare(`SELECT * FROM ${T.t} WHERE id=?${T.w?' AND '+T.w:''}`).get(id);if(!row)fail('Row not found',404);
-  db.transaction(()=>{
-    if(T.t==='users'&&row.role==='student'){
-      db.prepare("UPDATE fees SET status='unpaid' WHERE id IN(SELECT fee_id FROM payments WHERE user_id=? AND status='pending' AND fee_id IS NOT NULL)").run(id);
-      for(const t of['vehicles','passes','payments'])db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(id);
-      db.prepare('UPDATE fees SET user_id=NULL WHERE user_id=?').run(id)}
-    if(T.t==='payments'&&row.status==='pending'&&row.fee_id)db.prepare("UPDATE fees SET status='unpaid' WHERE id=?").run(row.fee_id);
-    db.prepare(`DELETE FROM ${T.t} WHERE id=?`).run(id)})();s.json({ok:true})}));
-app.post('/api/admin/passes',auth('admin'),wrap((q,s)=>{
-  const u=db.prepare("SELECT id FROM users WHERE role='student' AND code=?").get((q.body.code||'').trim().toUpperCase());if(!u)fail('Student not found');
-  const a=new Date(q.body.start_date||Date.now()),b=new Date(q.body.end_date);
-  if(isNaN(a)||isNaN(b)||b<=a)fail('Enter a valid start date and an end date after it');
-  db.prepare('INSERT INTO passes(user_id,start_date,end_date) VALUES(?,?,?)').run(u.id,a.toISOString(),b.toISOString());s.json({ok:true})}));
-app.get('/api/admin/backup',auth('admin'),(q,s)=>s.download(DBF,'sliit-parking-backup.db'));
-
-// ---------- ENFORCER
-app.get('/api/enforcer/me',auth('enforcer'),wrap((q,s)=>s.json(db.prepare('SELECT code,name FROM users WHERE id=?').get(q.user.id))));
-app.get('/api/enforcer/lookup',auth('enforcer'),wrap((q,s)=>{const t=(q.query.q||'').trim();if(!t)fail('Enter a student ID or vehicle number');
-  const u=db.prepare("SELECT id FROM users WHERE role='student' AND (qr_token=? OR code=?)").get(t,t.toUpperCase())||db.prepare('SELECT user_id id FROM vehicles WHERE reg_number=?').get(normReg(t));
-  s.json(u?{found:true,...profile(u.id)}:{found:false,reg:normReg(t)})}));
-app.post('/api/enforcer/drafts',auth('enforcer'),wrap((q,s)=>{const reg=normReg(q.body.vehicle_reg),t=new Date(q.body.start_time);
-  if(!reg||isNaN(t))fail('Vehicle number and start time are required');
-  const v=db.prepare('SELECT user_id FROM vehicles WHERE reg_number=?').get(reg);
-  if(v&&passOf(v.user_id).status==='ACTIVE')fail('This vehicle has an active pass - no fee can be added');
-  if(db.prepare("SELECT 1 FROM fees WHERE vehicle_reg=? AND status='draft'").get(reg))fail('A draft already exists for this vehicle');
-  db.prepare("INSERT INTO fees(vehicle_reg,user_id,enforcer_id,start_time,status) VALUES(?,?,?,?,'draft')").run(reg,v?v.user_id:null,q.user.id,t.toISOString());s.json({ok:true})}));
-app.get('/api/enforcer/fees',auth('enforcer'),wrap((q,s)=>{const m=q.query.view;let w='enforcer_id=?';
-  if(m==='draft')w+=" AND status='draft'";else{w+=" AND status!='draft'";if(m==='pending'||m==='unpaid')w+=` AND status='${m}'`}
-  s.json(db.prepare(`SELECT id,vehicle_reg,start_time,end_time,hours,amount,status,created_at FROM fees WHERE ${w} ORDER BY id DESC`).all(q.user.id))}));
-app.patch('/api/enforcer/fees/:id/finish',auth('enforcer'),wrap((q,s)=>{
-  const f=db.prepare("SELECT * FROM fees WHERE id=? AND enforcer_id=? AND status='draft'").get(q.params.id,q.user.id);if(!f)fail('Draft not found',404);
-  const a=new Date(f.start_time),b=new Date(q.body.end_time);if(isNaN(b)||b<=a)fail('Leave time must be after the start time');
-  const c=S(),mins=(b-a)/6e4,hours=mins<=Number(c.grace_minutes)?0:Math.ceil(mins/60),amount=hours*Number(c.hourly_rate);
-  if(!amount){db.prepare('DELETE FROM fees WHERE id=?').run(f.id);return s.json({hours:0,amount:0})}
-  const v=db.prepare('SELECT user_id FROM vehicles WHERE reg_number=?').get(f.vehicle_reg);
-  db.prepare("UPDATE fees SET end_time=?,hours=?,amount=?,status='unpaid',reason=? WHERE id=?").run(b.toISOString(),hours,amount,v?passOf(v.user_id).status:'UNREGISTERED',f.id);
-  s.json({hours,amount})}));
-
-app.listen(process.env.PORT||3000,()=>console.log('SLIIT Parking running. Open http://localhost:'+(process.env.PORT||3000)+'/student/  (serving '+PUB+')'));
+const wrap=fn=>async(q,s,n)=>{try{await fn(q,s,n)}catch(e){console.error('[request]',q.method,q.path,e);if(!s.headersSent)s.status(e.status||500).json({error:e.status?e.message:'Internal server error'})}};
+const query=(sql,params=[],client=pool)=>client.query(sql,params);
+const tx=async fn=>{const c=await pool.connect();try{await c.query('BEGIN');const v=await fn(c);await c.query('COMMIT');return v}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}};
+const defaults={hourly_rate:'100',pass_price:'5000',grace_minutes:'15',plan_days:'365',bank_info:'Bank details not set yet - admin can add them in Settings.'};
+const settings=async(c=pool)=>{const r=await query('SELECT key,value FROM settings',[],c);return {...defaults,...Object.fromEntries(r.rows.map(x=>[x.key,x.value]))}};
+const normReg=x=>String(x||'').toUpperCase().replace(/\s/g,'');
+const auth=role=>(q,s,n)=>{try{if(!SECRET)return s.status(503).json({error:'Server authentication is not configured'});q.user=jwt.verify(String(q.headers.authorization||'').replace(/^Bearer\s+/i,''),SECRET)}catch{return s.status(401).json({error:'Please log in'})}if(q.user.role!==role)return s.status(403).json({error:'This account cannot use this portal'});n()};
+const passOf=async(id,c=pool)=>{const r=await query('SELECT MAX(end_date) expiry FROM passes WHERE user_id=$1',[id],c),expiry=r.rows[0].expiry;return expiry?{status:new Date(expiry)>=new Date()?'ACTIVE':'EXPIRED',expiry}:{status:'NONE',expiry:null}};
+const profile=async(id,c=pool)=>{const r=await query('SELECT u.code,u.name,u.contact,v.reg_number reg,v.type,COALESCE(o.n,0)::int overdue_n,COALESCE(o.total,0)::numeric overdue_total FROM users u LEFT JOIN vehicles v ON v.user_id=u.id LEFT JOIN LATERAL(SELECT COUNT(*) n,COALESCE(SUM(amount),0) total FROM fees WHERE user_id=u.id AND status=$2)o ON true WHERE u.id=$1 AND u.role=$3',[id,'unpaid','student'],c);if(!r.rowCount)return null;const x=r.rows[0];return{code:x.code,name:x.name,contact:x.contact,reg:x.reg,type:x.type,...await passOf(id,c),overdue:{n:x.overdue_n,total:Number(x.overdue_total)}}};
+const uploadSlip=async file=>{if(!file)fail('Please upload your payment slip (JPG, PNG or PDF, max 5MB)');if(!storage)fail('Payment storage is not configured',503);const ext=file.mimetype==='application/pdf'?'.pdf':file.mimetype==='image/png'?'.png':'.jpg',key=new Date().toISOString().slice(0,10)+'/'+crypto.randomUUID()+ext;const {error}=await storage.upload(key,file.buffer,{contentType:file.mimetype,upsert:false});if(error)throw new Error('Could not save payment slip');return key};
+const sendSlip=async(q,s,role)=>{const r=await query('SELECT slip_file,user_id FROM payments WHERE id=$1',[q.params.id]),p=r.rows[0];if(!p||(role==='student'&&String(p.user_id)!==String(q.user.id)))fail('Not found',404);if(!storage||!p.slip_file)fail('File not found',404);const {data,error}=await storage.download(p.slip_file);if(error||!data)fail('File not found',404);const ext=path.extname(p.slip_file).toLowerCase();s.setHeader('Content-Type',ext==='.pdf'?'application/pdf':ext==='.png'?'image/png':'image/jpeg');s.setHeader('Content-Disposition','inline; filename="payment-slip'+ext+'"');s.send(Buffer.from(await data.arrayBuffer()))};
+const login=role=>wrap(async(q,s)=>{if(role==='admin'){const existing=await query("SELECT id FROM users WHERE role='admin' LIMIT 1");if(!existing.rowCount){if(!process.env.ADMIN_PASSWORD)fail('Admin account is not initialized. Set ADMIN_PASSWORD in Vercel.',503);await query("INSERT INTO users(role,code,name,password_hash) VALUES('admin','ADMIN','Admin',$1) ON CONFLICT(code) DO NOTHING",[await bcrypt.hash(process.env.ADMIN_PASSWORD,10)])}}const code=role==='admin'?'ADMIN':String(q.body.code||'').trim().toUpperCase().replace(/[\s-]/g,''),r=await query('SELECT * FROM users WHERE role=$1 AND code=$2',[role,code]),u=r.rows[0];if(!u||!await bcrypt.compare(String(q.body.password||''),u.password_hash||''))fail(role==='admin'?'Wrong password':'Wrong ID or password',401);s.json({token:jwt.sign({id:u.id,role},SECRET,{expiresIn:'12h'}),name:u.name})});
+['student','admin','enforcer'].forEach(role=>app.post('/api/'+role+'/login',login(role)));
+app.get('/',(_q,s)=>s.redirect('/student/'));app.get('/student',(_q,s)=>s.redirect('/student/'));app.get('/admin',(_q,s)=>s.redirect('/admin/'));app.get('/enforcer',(_q,s)=>s.redirect('/enforcer/'));
+app.get('/api/health',wrap(async(_q,s)=>{await query('SELECT 1');s.json({ok:true,database:'connected',storage:storage?'configured':'missing'})}));
+app.get('/api/student/info',wrap(async(_q,s)=>{const x=await settings();s.json({pass_price:x.pass_price,bank_info:x.bank_info,plan_days:x.plan_days})}));
+app.post('/api/student/register',upload.single('slip'),wrap(async(q,s)=>{const b=q.body,code=String(b.code||'').trim().toUpperCase().replace(/[\s-]/g,''),reg=normReg(b.vehicle_reg);if(!/^[A-Z0-9]{6,12}$/.test(code))fail('Enter a valid student registration number (e.g. IT26123567)');if(!String(b.name||'').trim()||!String(b.contact||'').trim()||!reg||!b.vehicle_type)fail('Please fill in every field');if(String(b.password||'').length<6)fail('Password must be at least 6 characters');if(b.password!==b.confirm)fail('Passwords do not match');const key=await uploadSlip(q.file);try{await tx(async c=>{if((await query('SELECT 1 FROM users WHERE code=$1',[code],c)).rowCount)fail('This student number is already registered');if((await query('SELECT 1 FROM vehicles WHERE reg_number=$1',[reg],c)).rowCount)fail('This vehicle number is already registered');const u=await query("INSERT INTO users(role,code,name,contact,password_hash,qr_token) VALUES('student',$1,$2,$3,$4,$5) RETURNING id",[code,b.name.trim(),b.contact.trim(),await bcrypt.hash(b.password,10),crypto.randomUUID()],c);await query('INSERT INTO vehicles(user_id,reg_number,type) VALUES($1,$2,$3)',[u.rows[0].id,reg,b.vehicle_type],c);const st=await settings(c);await query("INSERT INTO payments(user_id,kind,vehicle_reg,vehicle_type,amount,slip_file) VALUES($1,'pass',$2,$3,$4,$5)",[u.rows[0].id,reg,b.vehicle_type,Number(st.pass_price),key],c)})}catch(e){await storage.remove([key]).catch(()=>{});throw e}s.json({ok:true})}));
+app.get('/api/student/me',auth('student'),wrap(async(q,s)=>{const p=await profile(q.user.id),pending=await query("SELECT 1 FROM payments WHERE user_id=$1 AND kind='pass' AND status='pending' LIMIT 1",[q.user.id]),last=await query("SELECT status,reject_reason FROM payments WHERE user_id=$1 AND kind='pass' ORDER BY id DESC LIMIT 1",[q.user.id]);s.json({...p,pendingPass:!!pending.rowCount,lastPass:last.rows[0]||null})}));
+app.get('/api/student/qr',auth('student'),wrap(async(q,s)=>{if((await passOf(q.user.id)).status==='NONE')fail('No pass yet',403);const r=await query('SELECT qr_token FROM users WHERE id=$1',[q.user.id]);s.json({qr:await QRCode.toDataURL(r.rows[0].qr_token,{width:300,margin:1})})}));
+app.get('/api/student/payments',auth('student'),wrap(async(q,s)=>{s.json((await query('SELECT id,kind,vehicle_reg,amount,status,reject_reason,created_at FROM payments WHERE user_id=$1 ORDER BY id DESC',[q.user.id])).rows)}));
+app.get('/api/student/fees',auth('student'),wrap(async(q,s)=>{s.json((await query("SELECT id,vehicle_reg,amount,end_time FROM fees WHERE user_id=$1 AND status='unpaid' ORDER BY id DESC",[q.user.id])).rows)}));
+app.get('/api/student/fees/lookup',auth('student'),wrap(async(q,s)=>{s.json((await query("SELECT id,vehicle_reg,amount,end_time FROM fees WHERE vehicle_reg=$1 AND status='unpaid' AND (user_id IS NULL OR user_id=$2)",[normReg(q.query.reg),q.user.id])).rows)}));
+app.post('/api/student/pay',auth('student'),upload.single('slip'),wrap(async(q,s)=>{const b=q.body,key=await uploadSlip(q.file);try{await tx(async c=>{if(b.kind==='fee'){const r=await query("SELECT * FROM fees WHERE id=$1 AND status='unpaid' FOR UPDATE",[b.fee_id],c),f=r.rows[0];if(!f||(f.user_id&&String(f.user_id)!==String(q.user.id)))fail('Fee not found or already paid');await query("INSERT INTO payments(user_id,kind,fee_id,vehicle_reg,amount,slip_file) VALUES($1,'fee',$2,$3,$4,$5)",[q.user.id,f.id,f.vehicle_reg,f.amount,key],c);await query("UPDATE fees SET status='pending' WHERE id=$1",[f.id],c)}else if(b.kind==='pass'){const reg=normReg(b.vehicle_reg);if(!reg||!b.vehicle_type)fail('Vehicle number and type are required');if((await query("SELECT 1 FROM payments WHERE user_id=$1 AND kind='pass' AND status='pending' LIMIT 1",[q.user.id],c)).rowCount)fail('Your previous pass payment is still awaiting verification');if((await query('SELECT 1 FROM vehicles WHERE reg_number=$1 AND user_id<>$2',[reg,q.user.id],c)).rowCount)fail('That vehicle number belongs to another student');const st=await settings(c);await query("INSERT INTO payments(user_id,kind,vehicle_reg,vehicle_type,amount,slip_file) VALUES($1,'pass',$2,$3,$4,$5)",[q.user.id,reg,b.vehicle_type,Number(st.pass_price),key],c)}else fail('Invalid payment type')})}catch(e){await storage.remove([key]).catch(()=>{});throw e}s.json({ok:true})}));
+app.get('/api/student/slip/:id',auth('student'),wrap((q,s)=>sendSlip(q,s,'student')));
+app.get('/api/admin/payments',auth('admin'),wrap(async(q,s)=>{let sql="SELECT * FROM payments WHERE status "+(q.query.view==='history'?"<> 'pending'":"= 'pending'"),args=[];if(['fee','pass'].includes(q.query.kind)){args.push(q.query.kind);sql+=' AND kind=$1'}const r=await query(sql+' ORDER BY id DESC');const rows=await Promise.all(r.rows.map(async p=>{const student=p.user_id?await profile(p.user_id):null;let enforcer=null;if(p.fee_id){const f=await query('SELECT enforcer_id FROM fees WHERE id=$1',[p.fee_id]);if(f.rows[0]?.enforcer_id){const e=await query('SELECT code,name,contact FROM users WHERE id=$1',[f.rows[0].enforcer_id]);enforcer=e.rows[0]||null}}delete p.slip_file;return {...p,student,enforcer}}));s.json(rows)}));
+app.patch('/api/admin/payments/:id/approve',auth('admin'),wrap(async(q,s)=>{await tx(async c=>{const r=await query("SELECT * FROM payments WHERE id=$1 AND status='pending' FOR UPDATE",[q.params.id],c),p=r.rows[0];if(!p)fail('Payment is not pending',404);const now=new Date();if(p.kind==='pass'){const cur=await passOf(p.user_id,c),st=cur.expiry&&new Date(cur.expiry)>now?new Date(cur.expiry):now,conf=await settings(c),end=new Date(st.getTime()+Number(conf.plan_days)*864e5);await query('UPDATE vehicles SET reg_number=$1,type=$2 WHERE user_id=$3',[p.vehicle_reg,p.vehicle_type,p.user_id],c);await query('INSERT INTO passes(user_id,start_date,end_date,payment_id) VALUES($1,$2,$3,$4)',[p.user_id,st.toISOString(),end.toISOString(),p.id],c)}else await query("UPDATE fees SET status='paid' WHERE id=$1",[p.fee_id],c);await query("UPDATE payments SET status='approved',reviewed_at=$1 WHERE id=$2",[now.toISOString(),p.id],c)});s.json({ok:true})}));
+app.patch('/api/admin/payments/:id/reject',auth('admin'),wrap(async(q,s)=>{await tx(async c=>{const r=await query("SELECT * FROM payments WHERE id=$1 AND status='pending' FOR UPDATE",[q.params.id],c),p=r.rows[0];if(!p)fail('Payment is not pending',404);await query("UPDATE payments SET status='rejected',reject_reason=$1,reviewed_at=$2 WHERE id=$3",[q.body.reason||'Rejected',new Date().toISOString(),p.id],c);if(p.fee_id)await query("UPDATE fees SET status='unpaid' WHERE id=$1",[p.fee_id],c)});s.json({ok:true})}));
+app.get('/api/admin/slip/:id',auth('admin'),wrap((q,s)=>sendSlip(q,s,'admin')));
+app.post('/api/admin/enforcers',auth('admin'),wrap(async(q,s)=>{const b=q.body;if(!String(b.name||'').trim()||!String(b.contact||'').trim())fail('Name and contact details are required');if(String(b.password||'').length<6)fail('Password must be at least 6 characters');if(b.password!==b.confirm)fail('Passwords do not match');const code=await tx(async c=>{const r=await query("SELECT code FROM users WHERE role='enforcer'",[],c),max=Math.max(0,...r.rows.map(x=>parseInt(String(x.code).replace(/\D/g,''),10)||0)),next='EN'+String(max+1).padStart(3,'0');await query("INSERT INTO users(role,code,name,contact,password_hash) VALUES('enforcer',$1,$2,$3,$4)",[next,b.name.trim(),b.contact.trim(),await bcrypt.hash(b.password,10)],c);return next});s.json({code})}));
+app.get('/api/admin/settings',auth('admin'),wrap(async(_q,s)=>s.json(await settings())));
+app.put('/api/admin/settings',auth('admin'),wrap(async(q,s)=>{const b=q.body;await tx(async c=>{for(const k of ['hourly_rate','pass_price','grace_minutes','plan_days'])if(b[k]!==undefined){if(b[k]===''||!Number.isFinite(Number(b[k]))||Number(b[k])<0)fail('Invalid value for '+k);await query('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[k,String(b[k])],c)}if(b.bank_info!==undefined)await query('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',['bank_info',String(b.bank_info)],c);if(b.new_password){if(b.new_password.length<6)fail('New password must be at least 6 characters');await query("UPDATE users SET password_hash=$1 WHERE role='admin'",[await bcrypt.hash(b.new_password,10)],c)}});s.json(await settings())}));
+app.get('/api/admin/table/:name',auth('admin'),wrap(async(q,s)=>{const t={students:['users',"role='student'",'id,code,name,contact,created_at'],enforcers:['users',"role='enforcer'",'id,code,name,contact,created_at'],vehicles:['vehicles','','id,user_id,reg_number,type'],passes:['passes','','id,user_id,start_date,end_date,payment_id'],fees:['fees','','id,vehicle_reg,user_id,enforcer_id,start_time,end_time,hours,amount,status,reason,created_at'],payments:['payments','','id,user_id,kind,fee_id,vehicle_reg,vehicle_type,amount,status,reject_reason,created_at']}[q.params.name];if(!t)fail('Unknown table',404);const r=await query('SELECT '+t[2]+' FROM '+t[0]+(t[1]?' WHERE '+t[1]:'')+' ORDER BY id DESC');s.json({cols:t[2].split(','),editable:[],rows:r.rows})}));
+app.get('/api/admin/backup',auth('admin'),(_q,s)=>s.status(410).json({error:'Use Supabase database backups for cloud backups.'}));
+app.get('/api/enforcer/me',auth('enforcer'),wrap(async(q,s)=>{s.json((await query('SELECT code,name FROM users WHERE id=$1',[q.user.id])).rows[0]||{})}));
+app.get('/api/enforcer/lookup',auth('enforcer'),wrap(async(q,s)=>{const term=String(q.query.q||'').trim();if(!term)fail('Enter a student ID or vehicle number');let r=await query("SELECT id FROM users WHERE role='student' AND (qr_token::text=$1 OR code=$2)",[term,term.toUpperCase()]);if(!r.rowCount)r=await query('SELECT user_id id FROM vehicles WHERE reg_number=$1',[normReg(term)]);if(!r.rowCount)return s.json({found:false,reg:normReg(term)});s.json({found:true,...await profile(r.rows[0].id)})}));
+app.post('/api/enforcer/drafts',auth('enforcer'),wrap(async(q,s)=>{const reg=normReg(q.body.vehicle_reg),start=new Date(q.body.start_time);if(!reg||Number.isNaN(start.getTime()))fail('Vehicle number and start time are required');await tx(async c=>{const v=await query('SELECT user_id FROM vehicles WHERE reg_number=$1',[reg],c);if(v.rowCount&&(await passOf(v.rows[0].user_id,c)).status==='ACTIVE')fail('This vehicle has an active pass - no fee can be added');if((await query("SELECT 1 FROM fees WHERE vehicle_reg=$1 AND status='draft'",[reg],c)).rowCount)fail('A draft already exists for this vehicle');await query("INSERT INTO fees(vehicle_reg,user_id,enforcer_id,start_time,status) VALUES($1,$2,$3,$4,'draft')",[reg,v.rows[0]?.user_id||null,q.user.id,start.toISOString()],c)});s.json({ok:true})}));
+app.get('/api/enforcer/fees',auth('enforcer'),wrap(async(q,s)=>{const view=q.query.view;let sql='SELECT id,vehicle_reg,start_time,end_time,hours,amount,status,created_at FROM fees WHERE enforcer_id=$1',args=[q.user.id];if(view==='draft')sql+=" AND status='draft'";else{sql+=" AND status<>'draft'";if(['pending','unpaid'].includes(view)){args.push(view);sql+=' AND status=$2'}}s.json((await query(sql+' ORDER BY id DESC',args)).rows)}));
+app.patch('/api/enforcer/fees/:id/finish',auth('enforcer'),wrap(async(q,s)=>{const result=await tx(async c=>{const r=await query("SELECT * FROM fees WHERE id=$1 AND enforcer_id=$2 AND status='draft' FOR UPDATE",[q.params.id,q.user.id],c),f=r.rows[0];if(!f)fail('Draft not found',404);const start=new Date(f.start_time),end=new Date(q.body.end_time);if(Number.isNaN(end.getTime())||end<=start)fail('Leave time must be after the start time');const st=await settings(c),mins=(end-start)/60000,hours=mins<=Number(st.grace_minutes)?0:Math.ceil(mins/60),amount=hours*Number(st.hourly_rate);if(!amount){await query('DELETE FROM fees WHERE id=$1',[f.id],c);return{hours:0,amount:0}}const v=await query('SELECT user_id FROM vehicles WHERE reg_number=$1',[f.vehicle_reg],c),reason=v.rowCount?(await passOf(v.rows[0].user_id,c)).status:'UNREGISTERED';await query("UPDATE fees SET end_time=$1,hours=$2,amount=$3,status='unpaid',reason=$4 WHERE id=$5",[end.toISOString(),hours,amount,reason,f.id],c);return{hours,amount}});s.json(result)}));
+app.use((e,_q,s,_n)=>{console.error('[unhandled]',e);if(!s.headersSent)s.status(500).json({error:'Internal server error'})});
+module.exports=app;
+if(require.main===module&&!process.env.VERCEL){const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log('SLIIT Parking listening on '+port))}
