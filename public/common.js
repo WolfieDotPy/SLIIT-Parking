@@ -97,7 +97,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
 })();
 
 
-// Lightweight cursor-following liquid glow with optional click ripples.
+// Cursor-driven ambient hue shift. The effect changes the background colour only.
 (function initCursorFlow(){
   const root=document.documentElement;
   const key='sliit-animations';
@@ -105,131 +105,39 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   let enabled=localStorage.getItem(key)==='on'||(localStorage.getItem(key)!=='off'&&!reduced);
   const finePointer=window.matchMedia&&window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   const button=document.createElement('button');
-  button.type='button';
-  button.className='pill animation-toggle';
-  button.setAttribute('aria-pressed',enabled?'true':'false');
-  button.setAttribute('aria-label',enabled?'Turn cursor animations off':'Turn cursor animations on');
-  button.title=enabled?'Turn cursor animations off':'Turn cursor animations on';
+  button.type='button';button.className='pill animation-toggle';
   const ambient=document.createElement('div');
   ambient.className='ambient-flow-bg';ambient.setAttribute('aria-hidden','true');
-  const canvas=document.createElement('canvas');
-  canvas.className='cursor-flow-canvas';
-  canvas.setAttribute('aria-hidden','true');
-  const ctx=canvas.getContext('2d');
-  const points=Array.from({length:14},()=>({x:-1000,y:-1000}));
-  const ripples=[];
-  let width=0,height=0,dpr=1,raf=0,lastMove=0,hasPointer=false;
   function paintButton(){
-    const on=enabled;
-    root.dataset.animations=on?'on':'off';
-    button.textContent=on?'✧ Effects on':'✧ Effects off';
-    button.setAttribute('aria-pressed',on?'true':'false');
-    button.setAttribute('aria-label',on?'Turn cursor animations off':'Turn cursor animations on');
-    button.title=on?'Turn cursor animations off':'Turn cursor animations on';
+    root.dataset.animations=enabled?'on':'off';
+    button.textContent=enabled?'✧ Effects on':'✧ Effects off';
+    button.setAttribute('aria-pressed',enabled?'true':'false');
+    button.setAttribute('aria-label',enabled?'Turn background animations off':'Turn background animations on');
+    button.title=enabled?'Turn background animations off':'Turn background animations on';
   }
-  function resize(){
-    dpr=Math.min(window.devicePixelRatio||1,2);
-    width=window.innerWidth;height=window.innerHeight;
-    canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
-    canvas.style.width=width+'px';canvas.style.height=height+'px';
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-  }
-  function clear(){
-    if(ctx)ctx.clearRect(0,0,width,height);
-    points.forEach(p=>{p.x=-1000;p.y=-1000});
-    ripples.length=0;hasPointer=false;
-    if(raf){cancelAnimationFrame(raf);raf=0;}
-  }
-  function frame(now){
-    raf=0;
-    if(!enabled){clear();return;}
-    ctx.clearRect(0,0,width,height);
-    const fade=Math.max(0,1-(now-lastMove)/2100);
-    if(hasPointer&&fade>0){
-      for(let i=points.length-1;i>0;i--){
-        points[i].x+=(points[i-1].x-points[i].x)*.27;
-        points[i].y+=(points[i-1].y-points[i].y)*.27;
-      }
-      ctx.save();
-      ctx.globalCompositeOperation='screen';
-      // Broad, soft liquid cloud following the full pointer trail.
-      for(let i=points.length-1;i>=0;i--){
-        const p=points[i],strength=(1-i/points.length)*fade;
-        if(p.x<0||p.y<0)continue;
-        const radius=112-i*5.2;
-        const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
-        g.addColorStop(0,'rgba(112,151,255,'+(strength*.30)+')');
-        g.addColorStop(.32,'rgba(139,104,255,'+(strength*.22)+')');
-        g.addColorStop(.68,'rgba(70,190,235,'+(strength*.10)+')');
-        g.addColorStop(1,'rgba(70,190,235,0)');
-        ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();
-      }
-      // A bright, smoothly curved ribbon gives the trail a more fluid, visible shape.
-      const valid=points.filter(p=>p.x>=0&&p.y>=0);
-      if(valid.length>2){
-        const ribbon=ctx.createLinearGradient(valid[valid.length-1].x,valid[valid.length-1].y,valid[0].x,valid[0].y);
-        ribbon.addColorStop(0,'rgba(76,205,255,0)');
-        ribbon.addColorStop(.45,'rgba(139,119,255,'+(fade*.34)+')');
-        ribbon.addColorStop(1,'rgba(157,210,255,'+(fade*.62)+')');
-        ctx.beginPath();ctx.moveTo(valid[valid.length-1].x,valid[valid.length-1].y);
-        for(let i=valid.length-2;i>=0;i--){
-          const p=valid[i],next=valid[i+1],mx=(p.x+next.x)/2,my=(p.y+next.y)/2;
-          ctx.quadraticCurveTo(next.x,next.y,mx,my);
-        }
-        ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=ribbon;
-        ctx.lineWidth=30;ctx.shadowBlur=34;ctx.shadowColor='rgba(112,137,255,.8)';ctx.stroke();
-        ctx.shadowBlur=0;ctx.lineWidth=9;ctx.strokeStyle='rgba(185,220,255,'+(fade*.28)+')';ctx.stroke();
-      }
-      // Bright liquid core at the pointer.
-      const head=points[0],core=ctx.createRadialGradient(head.x,head.y,1,head.x,head.y,72);
-      core.addColorStop(0,'rgba(220,238,255,'+(fade*.42)+')');
-      core.addColorStop(.18,'rgba(126,177,255,'+(fade*.34)+')');
-      core.addColorStop(.55,'rgba(157,105,255,'+(fade*.18)+')');
-      core.addColorStop(1,'rgba(157,105,255,0)');
-      ctx.fillStyle=core;ctx.beginPath();ctx.arc(head.x,head.y,72,0,Math.PI*2);ctx.fill();
-      ctx.restore();
-    }
-    for(let i=ripples.length-1;i>=0;i--){
-      const r=ripples[i],age=(now-r.time)/1150;
-      if(age>=1){ripples.splice(i,1);continue;}
-      const radius=18+age*142,alpha=(1-age)*.42;
-      ctx.save();ctx.globalCompositeOperation='screen';
-      for(let ring=0;ring<3;ring++){
-        const rr=radius*(1-ring*.19);
-        ctx.beginPath();ctx.arc(r.x,r.y,rr,0,Math.PI*2);
-        ctx.strokeStyle=ring===0?'rgba(112,190,255,'+alpha+')':ring===1?'rgba(160,119,255,'+(alpha*.72)+')':'rgba(192,225,255,'+(alpha*.42)+')';
-        ctx.lineWidth=ring===0?2.6:1.5;ctx.shadowBlur=ring===0?18:9;ctx.shadowColor='rgba(133,151,255,.7)';ctx.stroke();
-      }
-      ctx.restore();
-    }
-    if((hasPointer&&fade>0)||ripples.length)raf=requestAnimationFrame(frame);
-    else{ctx.clearRect(0,0,width,height);hasPointer=false;}
-  }
-  function start(){if(!raf&&enabled)raf=requestAnimationFrame(frame);}
   function setEnabled(value){
     enabled=value;localStorage.setItem(key,enabled?'on':'off');paintButton();
-    if(!enabled)clear();
+    if(!enabled)ambient.style.filter='';
   }
   button.addEventListener('click',()=>setEnabled(!enabled));
   document.body.append(button);
   document.body.insertBefore(ambient,document.body.firstChild);
-  document.body.insertBefore(canvas,ambient.nextSibling);
-  resize();window.addEventListener('resize',resize,{passive:true});
-  if(finePointer)window.addEventListener('pointermove',e=>{
-    if(!enabled||e.pointerType==='touch')return;
-    points[0].x=e.clientX;points[0].y=e.clientY;
-    if(!hasPointer)points.forEach(p=>{p.x=e.clientX;p.y=e.clientY});
-    hasPointer=true;lastMove=performance.now();start();
-  },{passive:true});
-  window.addEventListener('click',e=>{
-    if(!enabled)return;
-    ripples.push({x:e.clientX,y:e.clientY,time:performance.now()});
-    if(ripples.length>5)ripples.shift();
-    start();
-  },{passive:true});
+  if(finePointer){
+    let lastHue=220;
+    window.addEventListener('pointermove',e=>{
+      if(!enabled||e.pointerType==='touch')return;
+      const x=e.clientX/Math.max(1,window.innerWidth);
+      const y=e.clientY/Math.max(1,window.innerHeight);
+      // A restrained blue → violet → teal colour drift, with no drawn cursor trail.
+      const hue=Math.round(194+x*82+(y-.5)*14);
+      if(Math.abs(hue-lastHue)>=2){
+        lastHue=hue;
+        ambient.style.filter='hue-rotate('+(hue-220)+'deg)';
+      }
+    },{passive:true});
+  }
   paintButton();
 })();
-
 /* Floating student/admin support messenger. */
 let supportStarted=false,supportOpen=false,supportConversationId=null,supportInbox=[];
 function supportTime(value){if(!value)return '';const d=new Date(value);return Number.isNaN(d.getTime())?'':d.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}
