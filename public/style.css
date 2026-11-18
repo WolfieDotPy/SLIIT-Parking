@@ -234,3 +234,70 @@ body>.wrap{position:relative;z-index:2}
   }
   .animation-toggle::before{content:"✧";font-size:27px;line-height:1}
 }
+
+
+/* Soft animated aurora backdrop inspired by Netlify Drop's central panel.
+   Kept entirely behind portal content and controlled by the Effects toggle. */
+body>.ambient-flow-bg{
+  position:fixed;
+  inset:0;
+  z-index:0;
+  overflow:hidden;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .7s ease;
+  background:
+    radial-gradient(ellipse at 50% 48%,rgba(108,126,238,.13),transparent 58%),
+    radial-gradient(ellipse at 18% 52%,rgba(137,112,231,.10),transparent 44%),
+    radial-gradient(ellipse at 84% 40%,rgba(82,177,221,.10),transparent 46%);
+}
+:root[data-animations="on"] body>.ambient-flow-bg{opacity:1}
+body>.ambient-flow-bg::before{
+  content:"";
+  position:absolute;
+  inset:-35% -20%;
+  background:
+    repeating-linear-gradient(90deg,transparent 0 34px,rgba(112,137,225,.035) 35px,transparent 37px 72px),
+    radial-gradient(ellipse at 35% 48%,rgba(93,137,240,.18),transparent 36%),
+    radial-gradient(ellipse at 68% 54%,rgba(165,113,237,.16),transparent 38%),
+    radial-gradient(ellipse at 50% 42%,rgba(76,196,208,.10),transparent 44%);
+  filter:blur(28px);
+  transform:translate3d(-3%,1%,0) rotate(-4deg) scale(1.05);
+  animation:ambientFlowDrift 18s ease-in-out infinite alternate;
+}
+body>.ambient-flow-bg::after{
+  content:"";
+  position:absolute;
+  inset:-20%;
+  background:repeating-linear-gradient(90deg,transparent 0 58px,rgba(255,255,255,.055) 59px,transparent 61px 118px);
+  opacity:.35;
+  filter:blur(9px);
+  transform:translateX(-2%);
+  animation:ambientFlowStreaks 24s linear infinite;
+}
+:root[data-theme="dark"] body>.ambient-flow-bg{
+  background:
+    radial-gradient(ellipse at 50% 48%,rgba(73,91,204,.20),transparent 58%),
+    radial-gradient(ellipse at 18% 52%,rgba(119,79,190,.16),transparent 44%),
+    radial-gradient(ellipse at 84% 40%,rgba(44,154,181,.14),transparent 46%);
+}
+:root[data-theme="dark"] body>.ambient-flow-bg::before{
+  background:
+    repeating-linear-gradient(90deg,transparent 0 34px,rgba(116,144,255,.055) 35px,transparent 37px 72px),
+    radial-gradient(ellipse at 35% 48%,rgba(63,104,220,.25),transparent 36%),
+    radial-gradient(ellipse at 68% 54%,rgba(142,88,214,.22),transparent 38%),
+    radial-gradient(ellipse at 50% 42%,rgba(42,177,190,.15),transparent 44%);
+}
+@keyframes ambientFlowDrift{
+  0%{transform:translate3d(-4%,-2%,0) rotate(-5deg) scale(1.04)}
+  50%{transform:translate3d(2%,3%,0) rotate(2deg) scale(1.10)}
+  100%{transform:translate3d(5%,-1%,0) rotate(-2deg) scale(1.06)}
+}
+@keyframes ambientFlowStreaks{
+  0%{transform:translateX(-3%)}
+  100%{transform:translateX(3%)}
+}
+@media(prefers-reduced-motion:reduce){
+  body>.ambient-flow-bg::before,body>.ambient-flow-bg::after{animation:none!important}
+  body>.ambient-flow-bg{transition:none}
+}
