@@ -236,8 +236,8 @@ body>.wrap{position:relative;z-index:2}
 }
 
 
-@property --flow-x{syntax:"<percentage>";inherits:false;initial-value:50%}
-@property --flow-y{syntax:"<percentage>";inherits:false;initial-value:50%}
+@property --flow-x{syntax:"<percentage>";inherits:true;initial-value:50%}
+@property --flow-y{syntax:"<percentage>";inherits:true;initial-value:50%}
 
 /* Soft animated aurora backdrop inspired by Netlify Drop's central panel.
    Kept entirely behind portal content and controlled by the Effects toggle. */
