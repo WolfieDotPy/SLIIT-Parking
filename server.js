@@ -836,8 +836,8 @@ app.post('/api/student/support/messages', auth('student'), wrap(async (req, res)
   const result = await transaction(async conn => {
     let conversation = await get('SELECT id FROM support_conversations WHERE student_id=?', [req.user.id], conn);
     if (!conversation) {
-      const id = await insert("INSERT INTO support_conversations(student_id,status,created_at,updated_at,student_last_read_at) VALUES(?,'open',?,?,?)", [req.user.id, now, now, now], conn);
-      conversation = { id };
+      const id = await insert("INSERT INTO support_conversations(student_id,status,created_at,updated_at,student_last_read_at) VALUES(?,'open',?,?,?) ON CONFLICT(student_id) DO NOTHING RETURNING id", [req.user.id, now, now, now], conn);
+      conversation = id ? { id } : await get('SELECT id FROM support_conversations WHERE student_id=?', [req.user.id], conn);
     }
     const messageId = await insert("INSERT INTO support_messages(conversation_id,sender_user_id,sender_role,body,created_at) VALUES(?,?,'student',?,?)", [conversation.id, req.user.id, body, now], conn);
     await run("UPDATE support_conversations SET status='open',updated_at=? WHERE id=?", [now, conversation.id], conn);
