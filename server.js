@@ -127,6 +127,7 @@ async function initializeDatabase() {
   if (!IS_POSTGRES) {
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY,
         role TEXT NOT NULL CHECK(role IN ('student','admin','enforcer')),
         code TEXT UNIQUE,
         name TEXT,
