@@ -79,5 +79,5 @@ function amt(){const o=$('#fsel').selectedOptions[0];$('#famt').value=o&&o.datas
 async function submitPay(e){e.preventDefault();try{await api('/api/student/pay',{method:'POST',body:new FormData(e.target)});toast('Submitted - the admin will verify your slip');await home()}catch(x){toast(x.message,1)}}
 api('/api/student/info').then(i=>$('#bank').textContent='Annual vehicle pass: '+money(i.pass_price)+'. '+i.bank_info).catch(()=>{});
 idCheck($('#rf').elements.code,$('#idmsg'));regCheck($('#rf').elements.vehicle_reg,$('#rgmsg'));matchPw($('#rf'));
-if(localStorage[K])home().catch(()=>show('landing'));
+if(portalToken())home().catch(()=>show('landing'));
 </script></body></html>
