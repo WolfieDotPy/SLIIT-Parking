@@ -196,6 +196,6 @@ function initSupportChat(){
   if(supportOpen){if(P==='admin'){if(supportConversationId)await supportLoadAdminThread();else await supportLoadInbox();}else await supportLoadStudent();}
   else{try{const r=await api(P==='admin'?'/api/admin/support/unread':'/api/student/support/unread');supportSetBadge(r.unread);}catch{}}
  };
- refresh();setInterval(refresh,5000);
+ refresh();setInterval(refresh,10000);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
 }
