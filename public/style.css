@@ -236,6 +236,9 @@ body>.wrap{position:relative;z-index:2}
 }
 
 
+@property --flow-x{syntax:"<percentage>";inherits:false;initial-value:50%}
+@property --flow-y{syntax:"<percentage>";inherits:false;initial-value:50%}
+
 /* Soft animated aurora backdrop inspired by Netlify Drop's central panel.
    Kept entirely behind portal content and controlled by the Effects toggle. */
 body>.ambient-flow-bg{
@@ -245,7 +248,8 @@ body>.ambient-flow-bg{
   overflow:hidden;
   pointer-events:none;
   opacity:0;
-  transition:opacity .7s ease,filter 1.4s cubic-bezier(.2,.7,.2,1);
+  --flow-x:50%;--flow-y:50%;
+  transition:opacity .7s ease,filter 1.4s cubic-bezier(.2,.7,.2,1),--flow-x 1.25s cubic-bezier(.2,.7,.2,1),--flow-y 1.25s cubic-bezier(.2,.7,.2,1);
   background:
     radial-gradient(ellipse at 50% 48%,rgba(108,126,238,.13),transparent 58%),
     radial-gradient(ellipse at 18% 52%,rgba(137,112,231,.10),transparent 44%),
@@ -258,7 +262,9 @@ body>.ambient-flow-bg::before{
   inset:-35% -20%;
   background:
     repeating-linear-gradient(90deg,transparent 0 34px,rgba(112,137,225,.035) 35px,transparent 37px 72px),
-    radial-gradient(ellipse at 35% 48%,rgba(93,137,240,.18),transparent 36%),
+    radial-gradient(ellipse at var(--flow-x) var(--flow-y),rgba(111,145,245,.17),transparent 43%),
+    radial-gradient(ellipse at calc(100% - var(--flow-x)) calc(100% - var(--flow-y)),rgba(151,117,229,.09),transparent 48%),
+    radial-gradient(ellipse at 35% 48%,rgba(93,137,240,.12),transparent 36%),
     radial-gradient(ellipse at 68% 54%,rgba(165,113,237,.16),transparent 38%),
     radial-gradient(ellipse at 50% 42%,rgba(76,196,208,.10),transparent 44%);
   filter:blur(28px);
@@ -284,7 +290,9 @@ body>.ambient-flow-bg::after{
 :root[data-theme="dark"] body>.ambient-flow-bg::before{
   background:
     repeating-linear-gradient(90deg,transparent 0 34px,rgba(116,144,255,.055) 35px,transparent 37px 72px),
-    radial-gradient(ellipse at 35% 48%,rgba(63,104,220,.25),transparent 36%),
+    radial-gradient(ellipse at var(--flow-x) var(--flow-y),rgba(80,122,230,.20),transparent 43%),
+    radial-gradient(ellipse at calc(100% - var(--flow-x)) calc(100% - var(--flow-y)),rgba(137,91,208,.13),transparent 48%),
+    radial-gradient(ellipse at 35% 48%,rgba(63,104,220,.17),transparent 36%),
     radial-gradient(ellipse at 68% 54%,rgba(142,88,214,.22),transparent 38%),
     radial-gradient(ellipse at 50% 42%,rgba(42,177,190,.15),transparent 44%);
 }
