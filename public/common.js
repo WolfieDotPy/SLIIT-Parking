@@ -97,7 +97,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
 })();
 
 
-// Cursor-driven ambient hue shift. The effect changes the background colour only.
+// Cursor-driven ambient hue shift. Pointer position influences the full background.
 (function initCursorFlow(){
   const root=document.documentElement;
   const key='sliit-animations';
@@ -117,7 +117,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   }
   function setEnabled(value){
     enabled=value;localStorage.setItem(key,enabled?'on':'off');paintButton();
-    if(!enabled)ambient.style.filter='';
+    if(!enabled){ambient.style.filter='';ambient.style.setProperty('--flow-x','50%');ambient.style.setProperty('--flow-y','50%');}
   }
   button.addEventListener('click',()=>setEnabled(!enabled));
   document.body.append(button);
@@ -126,14 +126,13 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
     let lastHue=220;
     window.addEventListener('pointermove',e=>{
       if(!enabled||e.pointerType==='touch')return;
-      const x=e.clientX/Math.max(1,window.innerWidth);
-      const y=e.clientY/Math.max(1,window.innerHeight);
-      // A restrained blue → violet → teal colour drift, with no drawn cursor trail.
-      const hue=Math.round(194+x*82+(y-.5)*14);
-      if(Math.abs(hue-lastHue)>=2){
-        lastHue=hue;
-        ambient.style.filter='hue-rotate('+(hue-220)+'deg)';
-      }
+      const x=Math.max(0,Math.min(100,e.clientX/Math.max(1,window.innerWidth)*100));
+      const y=Math.max(0,Math.min(100,e.clientY/Math.max(1,window.innerHeight)*100));
+      // Both axes move the colour field and influence its hue.
+      ambient.style.setProperty('--flow-x',x.toFixed(1)+'%');
+      ambient.style.setProperty('--flow-y',y.toFixed(1)+'%');
+      const hue=Math.round(184+x*.48+y*.42);
+      if(Math.abs(hue-lastHue)>=1){lastHue=hue;ambient.style.filter='hue-rotate('+(hue-220)+'deg)';}
     },{passive:true});
   }
   paintButton();
