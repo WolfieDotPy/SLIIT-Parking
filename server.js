@@ -444,7 +444,7 @@ app.use((req, res, next) => {
   }
 
   const vercelPreviewHost = String(process.env.VERCEL_URL || '').split('://').pop().split('/')[0].toLowerCase();
-  const isPreviewHost = Boolean(vercelPreviewHost && host === vercelPreviewHost);
+  const isPreviewHost = process.env.VERCEL_ENV === 'preview' && Boolean(vercelPreviewHost && host === vercelPreviewHost);
   // On the unique Vercel preview hostname, expose each portal by its path so all three
   // can be reviewed before promotion. Production aliases remain strictly isolated by host.
   const portal = isPreviewHost
