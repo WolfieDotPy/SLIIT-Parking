@@ -139,7 +139,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   }
   function frame(now){
     raf=0;
-    if(!enabled||!finePointer){clear();return;}
+    if(!enabled){clear();return;}
     ctx.clearRect(0,0,width,height);
     const fade=Math.max(0,1-(now-lastMove)/1350);
     if(hasPointer&&fade>0){
@@ -174,7 +174,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
     if((hasPointer&&fade>0)||ripples.length)raf=requestAnimationFrame(frame);
     else{ctx.clearRect(0,0,width,height);hasPointer=false;}
   }
-  function start(){if(!raf&&enabled&&finePointer)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&enabled)raf=requestAnimationFrame(frame);}
   function setEnabled(value){
     enabled=value;localStorage.setItem(key,enabled?'on':'off');paintButton();
     if(!enabled)clear();
