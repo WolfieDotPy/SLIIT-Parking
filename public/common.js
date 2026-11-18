@@ -12,7 +12,7 @@ $$('[data-logo-sm]').forEach(e=>e.innerHTML=LOGO.replace('class="logo"','class="
 function show(id){$$('.view').forEach(v=>v.classList.toggle('hidden',v.id!==id));scrollTo(0,0)}
 function toast(m,err){const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),3800)}
 const portalToken=()=>sessionStorage.getItem('adminImpersonationToken')||localStorage[K]||'';
-const adminPortalUrl=()=>{const h=location.hostname,local=h==='localhost'||h==='127.0.0.1',preview=h.endsWith('.vercel.app')&&h!=='sliit-parking-admin.vercel.app';return local||preview?location.origin+'/admin/':'https://sliit-parking-admin.vercel.app/admin/'};
+const adminPortalUrl=()=>{const h=location.hostname,local=h==='localhost'||h==='127.0.0.1',production=['sliit-parking-admin.vercel.app','sliit-parking-beta.vercel.app','sliit-parking-enforcer.vercel.app'].includes(h),preview=h.endsWith('.vercel.app')&&!production;return local||preview?location.origin+'/admin/':'https://sliit-parking-admin.vercel.app/admin/'};
 function exitAdminMode(){
   const token=portalToken(),finish=()=>{sessionStorage.removeItem('adminImpersonationToken');sessionStorage.removeItem('adminImpersonation');location.href=adminPortalUrl()};
   if(!token)return finish();
