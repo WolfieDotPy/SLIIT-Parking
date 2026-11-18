@@ -73,3 +73,25 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   m.textContent=e?'2 or 3 letters/numbers, a dash, then 4 digits - e.g. CAB-1234':ok()?'Valid vehicle number':'Must be 2 or 3 letters/numbers, a dash, then 4 digits (e.g. KS-9467)';
   m.className='small '+(plain||e?'':ok()?'ok':'bad')};
   i.addEventListener('input',chk);i.addEventListener('blur',()=>{if(ok())i.value=fmtReg(i.value);chk()});chk()}
+
+
+// Shared theme control for Admin, Student and Enforcer portals.
+(function initThemeToggle(){
+  const root=document.documentElement,key='sliit-theme';
+  const stored=localStorage.getItem(key);
+  if(stored==='dark'||stored==='light')root.dataset.theme=stored;
+  const button=document.createElement('button');
+  button.type='button';button.className='pill theme-toggle';
+  button.setAttribute('aria-pressed',root.dataset.theme==='dark'?'true':'false');
+  function paint(){
+    const dark=root.dataset.theme==='dark';
+    button.textContent=dark?'☀ Light mode':'☾ Dark mode';
+    button.setAttribute('aria-label',dark?'Switch to light mode':'Switch to dark mode');
+    button.setAttribute('aria-pressed',dark?'true':'false');
+  }
+  button.addEventListener('click',()=>{
+    const next=root.dataset.theme==='dark'?'light':'dark';
+    root.dataset.theme=next;localStorage.setItem(key,next);paint();
+  });
+  document.body.append(button);paint();
+})();
