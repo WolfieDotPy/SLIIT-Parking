@@ -24,6 +24,7 @@ test('student host health and public settings', async () => {
   assert.equal(info.status, 200);
   const body = await info.json();
   assert.ok(Number(body.pass_price) > 0);
+  assert.ok(Number(body.pass_bike_price) > 0);
   assert.ok(Number(body.plan_days) > 0);
   assert.equal(typeof body.bank_info, 'string');
 });
