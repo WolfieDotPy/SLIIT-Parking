@@ -116,7 +116,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   canvas.className='cursor-flow-canvas';
   canvas.setAttribute('aria-hidden','true');
   const ctx=canvas.getContext('2d');
-  const points=Array.from({length:9},()=>({x:-1000,y:-1000}));
+  const points=Array.from({length:14},()=>({x:-1000,y:-1000}));
   const ripples=[];
   let width=0,height=0,dpr=1,raf=0,lastMove=0,hasPointer=false;
   function paintButton(){
@@ -144,35 +144,63 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
     raf=0;
     if(!enabled){clear();return;}
     ctx.clearRect(0,0,width,height);
-    const fade=Math.max(0,1-(now-lastMove)/1350);
+    const fade=Math.max(0,1-(now-lastMove)/2100);
     if(hasPointer&&fade>0){
       for(let i=points.length-1;i>0;i--){
-        points[i].x+=(points[i-1].x-points[i].x)*.34;
-        points[i].y+=(points[i-1].y-points[i].y)*.34;
+        points[i].x+=(points[i-1].x-points[i].x)*.27;
+        points[i].y+=(points[i-1].y-points[i].y)*.27;
       }
       ctx.save();
       ctx.globalCompositeOperation='screen';
+      // Broad, soft liquid cloud following the full pointer trail.
       for(let i=points.length-1;i>=0;i--){
         const p=points[i],strength=(1-i/points.length)*fade;
         if(p.x<0||p.y<0)continue;
-        const radius=48-i*3.4;
+        const radius=112-i*5.2;
         const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
-        g.addColorStop(0,'rgba(115,145,255,'+(strength*.105)+')');
-        g.addColorStop(.48,'rgba(157,111,255,'+(strength*.065)+')');
-        g.addColorStop(1,'rgba(110,190,255,0)');
+        g.addColorStop(0,'rgba(112,151,255,'+(strength*.30)+')');
+        g.addColorStop(.32,'rgba(139,104,255,'+(strength*.22)+')');
+        g.addColorStop(.68,'rgba(70,190,235,'+(strength*.10)+')');
+        g.addColorStop(1,'rgba(70,190,235,0)');
         ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();
       }
+      // A bright, smoothly curved ribbon gives the trail a more fluid, visible shape.
+      const valid=points.filter(p=>p.x>=0&&p.y>=0);
+      if(valid.length>2){
+        const ribbon=ctx.createLinearGradient(valid[valid.length-1].x,valid[valid.length-1].y,valid[0].x,valid[0].y);
+        ribbon.addColorStop(0,'rgba(76,205,255,0)');
+        ribbon.addColorStop(.45,'rgba(139,119,255,'+(fade*.34)+')');
+        ribbon.addColorStop(1,'rgba(157,210,255,'+(fade*.62)+')');
+        ctx.beginPath();ctx.moveTo(valid[valid.length-1].x,valid[valid.length-1].y);
+        for(let i=valid.length-2;i>=0;i--){
+          const p=valid[i],next=valid[i+1],mx=(p.x+next.x)/2,my=(p.y+next.y)/2;
+          ctx.quadraticCurveTo(next.x,next.y,mx,my);
+        }
+        ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=ribbon;
+        ctx.lineWidth=30;ctx.shadowBlur=34;ctx.shadowColor='rgba(112,137,255,.8)';ctx.stroke();
+        ctx.shadowBlur=0;ctx.lineWidth=9;ctx.strokeStyle='rgba(185,220,255,'+(fade*.28)+')';ctx.stroke();
+      }
+      // Bright liquid core at the pointer.
+      const head=points[0],core=ctx.createRadialGradient(head.x,head.y,1,head.x,head.y,72);
+      core.addColorStop(0,'rgba(220,238,255,'+(fade*.42)+')');
+      core.addColorStop(.18,'rgba(126,177,255,'+(fade*.34)+')');
+      core.addColorStop(.55,'rgba(157,105,255,'+(fade*.18)+')');
+      core.addColorStop(1,'rgba(157,105,255,0)');
+      ctx.fillStyle=core;ctx.beginPath();ctx.arc(head.x,head.y,72,0,Math.PI*2);ctx.fill();
       ctx.restore();
     }
     for(let i=ripples.length-1;i>=0;i--){
-      const r=ripples[i],age=(now-r.time)/850;
+      const r=ripples[i],age=(now-r.time)/1150;
       if(age>=1){ripples.splice(i,1);continue;}
-      const radius=12+age*78,alpha=(1-age)*.22;
-      ctx.beginPath();ctx.arc(r.x,r.y,radius,0,Math.PI*2);
-      ctx.strokeStyle='rgba(132,151,255,'+alpha+')';
-      ctx.lineWidth=1.5*(1-age*.5);ctx.stroke();
-      ctx.beginPath();ctx.arc(r.x,r.y,radius*.72,0,Math.PI*2);
-      ctx.strokeStyle='rgba(186,145,255,'+(alpha*.55)+')';ctx.lineWidth=1;ctx.stroke();
+      const radius=18+age*142,alpha=(1-age)*.42;
+      ctx.save();ctx.globalCompositeOperation='screen';
+      for(let ring=0;ring<3;ring++){
+        const rr=radius*(1-ring*.19);
+        ctx.beginPath();ctx.arc(r.x,r.y,rr,0,Math.PI*2);
+        ctx.strokeStyle=ring===0?'rgba(112,190,255,'+alpha+')':ring===1?'rgba(160,119,255,'+(alpha*.72)+')':'rgba(192,225,255,'+(alpha*.42)+')';
+        ctx.lineWidth=ring===0?2.6:1.5;ctx.shadowBlur=ring===0?18:9;ctx.shadowColor='rgba(133,151,255,.7)';ctx.stroke();
+      }
+      ctx.restore();
     }
     if((hasPointer&&fade>0)||ripples.length)raf=requestAnimationFrame(frame);
     else{ctx.clearRect(0,0,width,height);hasPointer=false;}
