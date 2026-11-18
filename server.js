@@ -19,6 +19,8 @@ app.use((q,s,n)=>{
  const portal=PORTAL_HOSTS.admin.has(host)?'admin':PORTAL_HOSTS.enforcer.has(host)?'enforcer':'student';
  const p=q.path||'/';
  const shared=['/style.css','/favicon.ico','/robots.txt','/api/health'];
+ if(portal==='admin'&&p==='/')return s.redirect(308,'/admin/');
+ if(portal==='enforcer'&&p==='/')return s.redirect(308,'/enforcer/');
  const allowed=portal==='admin'
   ?(p==='/admin'||p.startsWith('/admin/')||p.startsWith('/api/admin/')||shared.includes(p))
   :portal==='enforcer'
