@@ -96,6 +96,114 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   document.body.append(button);paint();
 })();
 
+
+// Lightweight cursor-following liquid glow with optional click ripples.
+(function initCursorFlow(){
+  const root=document.documentElement;
+  const key='sliit-animations';
+  const reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let enabled=localStorage.getItem(key)==='on'||(localStorage.getItem(key)!=='off'&&!reduced);
+  const finePointer=window.matchMedia&&window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const button=document.createElement('button');
+  button.type='button';
+  button.className='pill animation-toggle';
+  button.setAttribute('aria-pressed',enabled?'true':'false');
+  button.setAttribute('aria-label',enabled?'Turn cursor animations off':'Turn cursor animations on');
+  button.title=enabled?'Turn cursor animations off':'Turn cursor animations on';
+  const canvas=document.createElement('canvas');
+  canvas.className='cursor-flow-canvas';
+  canvas.setAttribute('aria-hidden','true');
+  const ctx=canvas.getContext('2d');
+  const points=Array.from({length:9},()=>({x:-1000,y:-1000}));
+  const ripples=[];
+  let width=0,height=0,dpr=1,raf=0,lastMove=0,hasPointer=false;
+  function paintButton(){
+    const on=enabled;
+    button.textContent=on?'✧ Effects on':'✧ Effects off';
+    button.setAttribute('aria-pressed',on?'true':'false');
+    button.setAttribute('aria-label',on?'Turn cursor animations off':'Turn cursor animations on');
+    button.title=on?'Turn cursor animations off':'Turn cursor animations on';
+  }
+  function resize(){
+    dpr=Math.min(window.devicePixelRatio||1,2);
+    width=window.innerWidth;height=window.innerHeight;
+    canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
+    canvas.style.width=width+'px';canvas.style.height=height+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function clear(){
+    if(ctx)ctx.clearRect(0,0,width,height);
+    points.forEach(p=>{p.x=-1000;p.y=-1000});
+    ripples.length=0;hasPointer=false;
+    if(raf){cancelAnimationFrame(raf);raf=0;}
+  }
+  function frame(now){
+    raf=0;
+    if(!enabled||!finePointer){clear();return;}
+    ctx.clearRect(0,0,width,height);
+    const fade=Math.max(0,1-(now-lastMove)/1350);
+    if(hasPointer&&fade>0){
+      for(let i=points.length-1;i>0;i--){
+        points[i].x+=(points[i-1].x-points[i].x)*.34;
+        points[i].y+=(points[i-1].y-points[i].y)*.34;
+      }
+      ctx.save();
+      ctx.globalCompositeOperation='screen';
+      for(let i=points.length-1;i>=0;i--){
+        const p=points[i],strength=(1-i/points.length)*fade;
+        if(p.x<0||p.y<0)continue;
+        const radius=48-i*3.4;
+        const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
+        g.addColorStop(0,'rgba(115,145,255,'+(strength*.105)+')');
+        g.addColorStop(.48,'rgba(157,111,255,'+(strength*.065)+')');
+        g.addColorStop(1,'rgba(110,190,255,0)');
+        ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();
+      }
+      ctx.restore();
+    }
+    for(let i=ripples.length-1;i>=0;i--){
+      const r=ripples[i],age=(now-r.time)/850;
+      if(age>=1){ripples.splice(i,1);continue;}
+      const radius=12+age*78,alpha=(1-age)*.22;
+      ctx.beginPath();ctx.arc(r.x,r.y,radius,0,Math.PI*2);
+      ctx.strokeStyle='rgba(132,151,255,'+alpha+')';
+      ctx.lineWidth=1.5*(1-age*.5);ctx.stroke();
+      ctx.beginPath();ctx.arc(r.x,r.y,radius*.72,0,Math.PI*2);
+      ctx.strokeStyle='rgba(186,145,255,'+(alpha*.55)+')';ctx.lineWidth=1;ctx.stroke();
+    }
+    if((hasPointer&&fade>0)||ripples.length)raf=requestAnimationFrame(frame);
+    else{ctx.clearRect(0,0,width,height);hasPointer=false;}
+  }
+  function start(){if(!raf&&enabled&&finePointer)raf=requestAnimationFrame(frame);}
+  function setEnabled(value){
+    enabled=value;localStorage.setItem(key,enabled?'on':'off');paintButton();
+    if(!enabled)clear();
+  }
+  button.addEventListener('click',()=>setEnabled(!enabled));
+  document.body.append(button);
+  if(finePointer){
+    document.body.insertBefore(canvas,document.body.firstChild);
+    resize();window.addEventListener('resize',resize,{passive:true});
+    window.addEventListener('pointermove',e=>{
+      if(!enabled||e.pointerType==='touch')return;
+      points[0].x=e.clientX;points[0].y=e.clientY;
+      if(!hasPointer)points.forEach(p=>{p.x=e.clientX;p.y=e.clientY});
+      hasPointer=true;lastMove=performance.now();start();
+    },{passive:true});
+    window.addEventListener('click',e=>{
+      if(!enabled)return;
+      ripples.push({x:e.clientX,y:e.clientY,time:performance.now()});
+      if(ripples.length>5)ripples.shift();
+      start();
+    },{passive:true});
+  }else{
+    button.disabled=true;
+    button.title='Cursor animations are available on devices with a mouse or trackpad';
+    button.setAttribute('aria-label',button.title);
+  }
+  paintButton();
+})();
+
 /* Floating student/admin support messenger. */
 let supportStarted=false,supportOpen=false,supportConversationId=null,supportInbox=[];
 function supportTime(value){if(!value)return '';const d=new Date(value);return Number.isNaN(d.getTime())?'':d.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}
