@@ -123,7 +123,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
     const dt=lastFrame?Math.min(64,time-lastFrame):16;
     lastFrame=time;
     // Exponential easing keeps even sudden corner-to-corner pointer jumps fluid.
-    const ease=1-Math.exp(-dt/420);
+    const ease=1-Math.exp(-dt/1100);
     currentX+=(targetX-currentX)*ease;
     currentY+=(targetY-currentY)*ease;
     currentHue+=(targetHue-currentHue)*ease;
@@ -154,6 +154,14 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   document.body.append(button);
   document.body.insertBefore(ambient,document.body.firstChild);
   if(finePointer){
+    // Browsers suspend animation frames in background tabs. Reset the frame
+    // handle on return so the next pointer event always starts a fresh glide.
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden){
+        if(frameId)cancelAnimationFrame(frameId);
+        frameId=0;lastFrame=0;
+      }
+    });
     window.addEventListener('pointermove',e=>{
       if(!enabled||e.pointerType==='touch')return;
       targetX=Math.max(0,Math.min(100,e.clientX/Math.max(1,window.innerWidth)*100));
