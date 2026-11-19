@@ -237,6 +237,13 @@ async function initializeDatabase() {
         slip_name TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_pending_student_registrations_email ON pending_student_registrations(email,created_at);
+      CREATE TABLE IF NOT EXISTS registration_otp_send_log (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        ip_address TEXT,
+        sent_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_registration_otp_send_log_sent ON registration_otp_send_log(sent_at,email,ip_address);
       CREATE INDEX IF NOT EXISTS idx_fees_user_status ON fees(user_id,status);
       CREATE INDEX IF NOT EXISTS idx_fees_enforcer_status ON fees(enforcer_id,status);
       CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments(user_id,status);
@@ -386,6 +393,16 @@ async function initializeDatabase() {
         slip_name TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_pending_student_registrations_email ON public.pending_student_registrations(email,created_at);
+      CREATE TABLE IF NOT EXISTS public.registration_otp_send_log (
+        id UUID PRIMARY KEY,
+        email TEXT NOT NULL,
+        ip_address TEXT,
+        sent_at TIMESTAMPTZ NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_registration_otp_send_log_sent ON public.registration_otp_send_log(sent_at,email,ip_address);
+      ALTER TABLE public.registration_otp_send_log ENABLE ROW LEVEL SECURITY;
+      REVOKE ALL ON public.registration_otp_send_log FROM anon, authenticated;
+      GRANT ALL ON public.registration_otp_send_log TO service_role;
       ALTER TABLE public.pending_student_registrations ENABLE ROW LEVEL SECURITY;
       REVOKE ALL ON public.pending_student_registrations FROM anon, authenticated;
       GRANT ALL ON public.pending_student_registrations TO service_role;
@@ -901,13 +918,15 @@ app.post('/api/student/register/start', upload.single('slip'), wrap(async (req, 
   const now = new Date();
   const nowIso = now.toISOString();
   const ip = requestAuditContext(req).ip;
+  const cutoff = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
   const recent = await get(
-    'SELECT COUNT(*) AS n FROM pending_student_registrations WHERE created_at>? AND (email=? OR ip_address=?)',
-    [new Date(now.getTime() - 60 * 60 * 1000).toISOString(), data.email, ip || ''], 
+    'SELECT COUNT(*) AS n FROM registration_otp_send_log WHERE sent_at>? AND (email=? OR ip_address=?)',
+    [cutoff, data.email, ip || 'unknown']
   );
   if (Number(recent?.n || 0) >= 5) fail('Too many verification requests. Please try again in an hour.', 429);
 
   await run('DELETE FROM pending_student_registrations WHERE expires_at<?', [nowIso]);
+  await run('DELETE FROM registration_otp_send_log WHERE sent_at<?', [new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()]);
   const pendingId = crypto.randomUUID();
   const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   const passwordHash = await bcrypt.hash(String(req.body.password), 10);
@@ -922,6 +941,8 @@ app.post('/api/student/register/start', upload.single('slip'), wrap(async (req, 
   );
   try {
     await sendRegistrationOtp(data.email, otp);
+    await run('INSERT INTO registration_otp_send_log(id,email,ip_address,sent_at) VALUES(?,?,?,?)',
+      [crypto.randomUUID(),data.email,ip || 'unknown',nowIso]);
   } catch (error) {
     await run('DELETE FROM pending_student_registrations WHERE id=?', [pendingId]);
     throw error;
@@ -935,6 +956,12 @@ app.post('/api/student/register/resend', wrap(async (req, res) => {
   const pending = await get('SELECT * FROM pending_student_registrations WHERE id=?', [pendingId]);
   if (!pending || new Date(pending.expires_at).getTime() <= Date.now()) fail('This verification code has expired. Please register again.', 410);
   if (Number(pending.send_count) >= 5) fail('You have reached the resend limit. Please register again later.', 429);
+  const ip = requestAuditContext(req).ip || 'unknown';
+  const recent = await get(
+    'SELECT COUNT(*) AS n FROM registration_otp_send_log WHERE sent_at>? AND (email=? OR ip_address=?)',
+    [new Date(Date.now()-60*60*1000).toISOString(),pending.email,ip]
+  );
+  if (Number(recent?.n || 0) >= 5) fail('Too many verification emails have been requested. Please try again in an hour.', 429);
   const elapsed = Date.now() - new Date(pending.last_sent_at).getTime();
   if (elapsed < 60000) fail('Please wait ' + Math.ceil((60000 - elapsed) / 1000) + ' seconds before requesting another code.', 429);
   const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
@@ -942,6 +969,8 @@ app.post('/api/student/register/resend', wrap(async (req, res) => {
   const now = new Date().toISOString();
   await run('UPDATE pending_student_registrations SET otp_hash=?,expires_at=?,attempts=0,send_count=send_count+1,last_sent_at=? WHERE id=?',
     [registrationOtpHash(pendingId,otp),new Date(Date.now()+5*60*1000).toISOString(),now,pendingId]);
+  await run('INSERT INTO registration_otp_send_log(id,email,ip_address,sent_at) VALUES(?,?,?,?)',
+    [crypto.randomUUID(),pending.email,ip,now]);
   res.json({ ok: true, expiresIn: 300, resendAfter: 60 });
 }));
 
