@@ -9,8 +9,64 @@ const nowLocal=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6
 const LOGO=`<img class="logo" src="/logo.png" alt="" onerror="this.outerHTML='<div class=crest>SLIIT</div>'">`;
 $$('[data-logo]').forEach(e=>e.innerHTML=LOGO);
 $$('[data-logo-sm]').forEach(e=>e.innerHTML=LOGO.replace('class="logo"','class="logo" style="height:36px"'));
-function show(id){$$('.view').forEach(v=>v.classList.toggle('hidden',v.id!==id));scrollTo(0,0)}
-function toast(m,err){const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),3800)}
+const reducedMotionQuery=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
+let activePortalView=document.querySelector('.view:not(.hidden)');
+let portalViewExitTimer=null,portalViewEnterTimer=null;
+function portalMotionEnabled(){
+  return document.documentElement.dataset.animations==='on'&&!(reducedMotionQuery&&reducedMotionQuery.matches);
+}
+function syncPortalMotion(enabled){
+  if(enabled)return;
+  clearTimeout(portalViewExitTimer);clearTimeout(portalViewEnterTimer);
+  portalViewExitTimer=portalViewEnterTimer=null;
+  const current=activePortalView&&!activePortalView.classList.contains('hidden')
+    ?activePortalView:document.querySelector('.view:not(.hidden)');
+  $('.view').forEach(v=>{
+    v.classList.remove('view-entering','view-leaving');
+    v.classList.toggle('hidden',v!==current);
+  });
+  activePortalView=current||null;
+}
+function show(id){
+  const next=document.getElementById(id);
+  if(!next||!next.classList.contains('view'))return;
+  clearTimeout(portalViewExitTimer);clearTimeout(portalViewEnterTimer);
+  portalViewExitTimer=portalViewEnterTimer=null;
+  const current=activePortalView&&!activePortalView.classList.contains('hidden')
+    ?activePortalView:document.querySelector('.view:not(.hidden)');
+  $('.view').forEach(v=>v.classList.remove('view-entering','view-leaving'));
+  if(!portalMotionEnabled()||!current||current===next){
+    $('.view').forEach(v=>v.classList.toggle('hidden',v!==next));
+    activePortalView=next;
+    scrollTo(0,0);
+    return;
+  }
+  $('.view').forEach(v=>{if(v!==current&&v!==next)v.classList.add('hidden')});
+  current.classList.remove('hidden');
+  next.classList.remove('hidden');
+  current.classList.add('view-leaving');
+  next.classList.add('view-entering');
+  activePortalView=next;
+  portalViewExitTimer=setTimeout(()=>{
+    current.classList.add('hidden');
+    current.classList.remove('view-leaving');
+    portalViewExitTimer=null;
+  },190);
+  portalViewEnterTimer=setTimeout(()=>{
+    next.classList.remove('view-entering');
+    portalViewEnterTimer=null;
+  },480);
+  scrollTo({top:0,behavior:'smooth'});
+}
+function toast(m,err){
+  const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;document.body.append(t);
+  setTimeout(()=>{
+    if(portalMotionEnabled()){
+      t.classList.add('toast-leaving');
+      setTimeout(()=>t.remove(),190);
+    }else t.remove();
+  },3800);
+}
 const portalToken=()=>sessionStorage.getItem('adminImpersonationToken')||localStorage[K]||'';
 const adminPortalUrl=()=>{const h=location.hostname,local=h==='localhost'||h==='127.0.0.1',production=['sliit-parking-admin.vercel.app','sliit-parking-beta.vercel.app','sliit-parking-enforcer.vercel.app'].includes(h),preview=h.endsWith('.vercel.app')&&!production;return local||preview?location.origin+'/admin/':'https://sliit-parking-admin.vercel.app/admin/'};
 function exitAdminMode(){
@@ -114,8 +170,8 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
     root.dataset.animations=enabled?'on':'off';
     button.textContent=enabled?'✧ Effects on':'✧ Effects off';
     button.setAttribute('aria-pressed',enabled?'true':'false');
-    button.setAttribute('aria-label',enabled?'Turn background animations off':'Turn background animations on');
-    button.title=enabled?'Turn background animations off':'Turn background animations on';
+    button.setAttribute('aria-label',enabled?'Turn background and page animations off':'Turn background and page animations on');
+    button.title=enabled?'Turn background and page animations off':'Turn background and page animations on';
   }
   function renderFrame(time){
     frameId=0;
@@ -141,6 +197,7 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
   }
   function setEnabled(value){
     enabled=value;localStorage.setItem(key,enabled?'on':'off');paintButton();
+    syncPortalMotion(enabled);
     if(!enabled){
       if(frameId)cancelAnimationFrame(frameId);
       frameId=0;lastFrame=0;
@@ -171,7 +228,41 @@ function regCheck(i,m,plain){const ok=()=>/^[A-Z0-9]{2,3}-\d{4}$/.test(fmtReg(i.
     },{passive:true});
   }
   paintButton();
+  if(enabled)initPortalMotion();
 })();
+
+function initPortalMotion(){
+  if(!portalMotionEnabled())return;
+  document.body.classList.add('portal-motion-boot');
+  const initialView=$('.view:not(.hidden)');
+  if(initialView){
+    initialView.classList.add('view-entering');
+    setTimeout(()=>initialView.classList.remove('view-entering'),480);
+  }
+  setTimeout(()=>document.body.classList.remove('portal-motion-boot'),680);
+
+  // Newly-rendered cards and table rows receive a brief reveal. The observer
+  // ignores hidden views so off-screen sections don't animate before display.
+  const wrap=$('.wrap');
+  if(!wrap||!window.MutationObserver)return;
+  const selector='.glass,.row,.fee-card,.passcol,tbody tr';
+  const observer=new MutationObserver(records=>{
+    if(!portalMotionEnabled())return;
+    const added=new Set();
+    records.forEach(record=>record.addedNodes.forEach(node=>{
+      if(node.nodeType!==1)return;
+      if(node.matches(selector))added.add(node);
+      node.querySelectorAll?.(selector).forEach(el=>added.add(el));
+    }));
+    added.forEach(el=>{
+      if(el.closest('.hidden'))return;
+      el.classList.add('motion-reveal');
+      setTimeout(()=>el.classList.remove('motion-reveal'),420);
+    });
+  });
+  observer.observe(wrap,{childList:true,subtree:true});
+}
+
 /* Floating student/admin support messenger. */
 let supportStarted=false,supportOpen=false,supportConversationId=null,supportInbox=[];
 function supportTime(value){if(!value)return '';const d=new Date(value);return Number.isNaN(d.getTime())?'':d.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}
