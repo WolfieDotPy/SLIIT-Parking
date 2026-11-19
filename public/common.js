@@ -21,7 +21,7 @@ function syncPortalMotion(enabled){
   portalViewExitTimer=portalViewEnterTimer=null;
   const current=activePortalView&&!activePortalView.classList.contains('hidden')
     ?activePortalView:document.querySelector('.view:not(.hidden)');
-  $('.view').forEach(v=>{
+  $$('.view').forEach(v=>{
     v.classList.remove('view-entering','view-leaving');
     v.classList.toggle('hidden',v!==current);
   });
@@ -34,14 +34,14 @@ function show(id){
   portalViewExitTimer=portalViewEnterTimer=null;
   const current=activePortalView&&!activePortalView.classList.contains('hidden')
     ?activePortalView:document.querySelector('.view:not(.hidden)');
-  $('.view').forEach(v=>v.classList.remove('view-entering','view-leaving'));
+  $$('.view').forEach(v=>v.classList.remove('view-entering','view-leaving'));
   if(!portalMotionEnabled()||!current||current===next){
-    $('.view').forEach(v=>v.classList.toggle('hidden',v!==next));
+    $$('.view').forEach(v=>v.classList.toggle('hidden',v!==next));
     activePortalView=next;
     scrollTo(0,0);
     return;
   }
-  $('.view').forEach(v=>{if(v!==current&&v!==next)v.classList.add('hidden')});
+  $$('.view').forEach(v=>{if(v!==current&&v!==next)v.classList.add('hidden')});
   current.classList.remove('hidden');
   next.classList.remove('hidden');
   current.classList.add('view-leaving');
