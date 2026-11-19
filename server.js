@@ -606,6 +606,53 @@ function registrationOtpHash(pendingId, otp) {
 }
 
 async function sendRegistrationOtp(email, otp) {
+  const subject = 'Verify your SLIIT Parking registration';
+  const html = '<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:28px;color:#18213b">' +
+    '<h2 style="margin:0 0 16px">Verify your email</h2>' +
+    '<p>Use this verification code to complete your SLIIT Parking registration:</p>' +
+    '<div style="font-size:32px;font-weight:700;letter-spacing:8px;padding:18px 22px;background:#f1f4fb;border-radius:12px;text-align:center">' + otp + '</div>' +
+    '<p>This code expires in <b>5 minutes</b>. Do not share it with anyone.</p>' +
+    '<p style="font-size:12px;color:#667085">If you did not request this code, you can ignore this email.</p>' +
+    '</div>';
+  const text = 'Your SLIIT Parking email verification code is ' + otp +
+    '. It expires in 5 minutes. Do not share this code with anyone.';
+
+  // Prefer Gmail SMTP when configured. Keep Resend as a compatible fallback.
+  // Gmail credentials must be an App Password, never the account's normal password.
+  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000
+    });
+    try {
+      await transporter.sendMail({
+        from: { name: 'SLIIT Parking', address: process.env.GMAIL_USER },
+        to: email,
+        subject,
+        text,
+        html
+      });
+    } catch (error) {
+      console.error('[email] Gmail SMTP delivery failed', {
+        code: error.code || 'UNKNOWN',
+        responseCode: error.responseCode || null
+      });
+      fail('We could not send the verification email. Please check the sender configuration or try again shortly.', 503);
+    } finally {
+      transporter.close();
+    }
+    return;
+  }
+
   if (!process.env.RESEND_API_KEY || !process.env.OTP_FROM_EMAIL) {
     fail('Email verification is not configured yet. Please contact the administrator.', 503);
   }
@@ -615,22 +662,11 @@ async function sendRegistrationOtp(email, otp) {
       Authorization: 'Bearer ' + process.env.RESEND_API_KEY,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      from: process.env.OTP_FROM_EMAIL,
-      to: [email],
-      subject: 'Verify your SLIIT Parking registration',
-      html: '<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:28px;color:#18213b">' +
-        '<h2 style="margin:0 0 16px">Verify your email</h2>' +
-        '<p>Use this verification code to complete your SLIIT Parking registration:</p>' +
-        '<div style="font-size:32px;font-weight:700;letter-spacing:8px;padding:18px 22px;background:#f1f4fb;border-radius:12px;text-align:center">' + otp + '</div>' +
-        '<p>This code expires in <b>5 minutes</b>. Do not share it with anyone.</p>' +
-        '<p style="font-size:12px;color:#667085">If you did not request this code, you can ignore this email.</p>' +
-        '</div>'
-    })
+    body: JSON.stringify({ from: process.env.OTP_FROM_EMAIL, to: [email], subject, html, text })
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    console.error('[email] OTP delivery failed', response.status, detail.slice(0, 500));
+    console.error('[email] Resend OTP delivery failed', response.status, detail.slice(0, 500));
     fail('We could not send the verification email. Please try again shortly.', 503);
   }
 }
