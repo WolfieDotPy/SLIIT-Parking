@@ -55,7 +55,7 @@ function show(id){
   portalViewEnterTimer=setTimeout(()=>{
     next.classList.remove('view-entering');
     portalViewEnterTimer=null;
-  },480);
+  },540);
   scrollTo({top:0,behavior:'smooth'});
 }
 function toast(m,err){
@@ -237,7 +237,7 @@ function initPortalMotion(){
   const initialView=$('.view:not(.hidden)');
   if(initialView){
     initialView.classList.add('view-entering');
-    setTimeout(()=>initialView.classList.remove('view-entering'),480);
+    setTimeout(()=>initialView.classList.remove('view-entering'),540);
   }
   setTimeout(()=>document.body.classList.remove('portal-motion-boot'),680);
 
