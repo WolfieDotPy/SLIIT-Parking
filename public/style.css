@@ -313,3 +313,142 @@ body>.ambient-flow-bg::after{
 
 /* Add breathing room between login credentials and the submit action. */
 .login-submit{margin-top:14px}
+
+/* Shared motion system for Student, Admin and Enforcer portals.
+   Controlled together with the existing Effects toggle. */
+:root[data-animations="on"] body.portal-motion-boot>.wrap{
+  animation:portalAppEnter .62s cubic-bezier(.2,.75,.25,1) both;
+}
+:root[data-animations="on"] .view-entering{
+  animation:portalViewEnter .28s cubic-bezier(.2,.75,.25,1) both;
+}
+:root[data-animations="on"] .view-leaving{
+  position:absolute;
+  inset:0 0 auto;
+  z-index:5;
+  pointer-events:none;
+  animation:portalViewExit .18s cubic-bezier(.4,0,.8,.3) both;
+}
+:root[data-animations="on"] .view-entering .glass{
+  animation:portalPanelReveal .38s cubic-bezier(.2,.75,.25,1) .025s both;
+}
+:root[data-animations="on"] .view-entering .glass:nth-of-type(2){animation-delay:.075s}
+:root[data-animations="on"] .view-entering .glass:nth-of-type(3){animation-delay:.12s}
+:root[data-animations="on"] .view-entering .bar,
+:root[data-animations="on"] .view-entering .actions,
+:root[data-animations="on"] .view-entering .tabs{
+  animation:portalElementReveal .34s cubic-bezier(.2,.75,.25,1) .07s both;
+}
+:root[data-animations="on"] .view-entering .fee-card,
+:root[data-animations="on"] .view-entering .row,
+:root[data-animations="on"] .view-entering tbody tr{
+  animation:portalItemReveal .28s cubic-bezier(.2,.75,.25,1) both;
+}
+:root[data-animations="on"] .view-entering tbody tr:nth-child(2){animation-delay:.035s}
+:root[data-animations="on"] .view-entering tbody tr:nth-child(3){animation-delay:.07s}
+:root[data-animations="on"] .view-entering tbody tr:nth-child(4){animation-delay:.105s}
+:root[data-animations="on"] .view-entering tbody tr:nth-child(5){animation-delay:.14s}
+
+:root[data-animations="on"] .motion-reveal{
+  animation:portalItemReveal .28s cubic-bezier(.2,.75,.25,1) both;
+}
+:root[data-animations="on"] .pill:not(:disabled){
+  transition:transform .16s cubic-bezier(.2,.75,.25,1),box-shadow .16s ease,background-color .16s ease,border-color .16s ease;
+}
+@media(hover:hover) and (pointer:fine){
+  :root[data-animations="on"] .pill:not(:disabled):hover{
+    transform:translateY(-1px);
+    box-shadow:0 5px 14px #232a6e20;
+  }
+  :root[data-animations="on"] .row:hover,
+  :root[data-animations="on"] .support-inbox-item:hover{
+    transform:translateY(-1px);
+    box-shadow:0 4px 12px #232a6e12;
+  }
+  :root[data-animations="on"] .support-launcher:hover{
+    transform:translateY(-2px);
+    box-shadow:0 8px 24px #232a6e35;
+  }
+}
+:root[data-animations="on"] .pill:not(:disabled):active{transform:scale(.985)}
+:root[data-animations="on"] .row,
+:root[data-animations="on"] .support-inbox-item,
+:root[data-animations="on"] .support-launcher{
+  transition:transform .17s ease,box-shadow .17s ease,border-color .17s ease,background-color .17s ease;
+}
+:root[data-animations="on"] input,
+:root[data-animations="on"] select,
+:root[data-animations="on"] textarea{
+  transition:border-color .18s ease,box-shadow .18s ease,background-color .18s ease;
+}
+:root[data-animations="on"] input:focus,
+:root[data-animations="on"] select:focus,
+:root[data-animations="on"] textarea:focus{
+  box-shadow:0 0 0 3px #7774d928;
+}
+
+:root[data-animations="on"] .toast{animation:portalToastIn .24s cubic-bezier(.2,.75,.25,1) both}
+:root[data-animations="on"] .toast.toast-leaving{animation:portalToastOut .18s ease both}
+:root[data-animations="on"] .support-panel:not(.hidden){animation:portalPanelReveal .24s cubic-bezier(.2,.75,.25,1) both}
+:root[data-animations="on"] .support-inbox-view:not(.hidden),
+:root[data-animations="on"] .support-thread-view:not(.hidden){
+  animation:portalNestedReveal .2s ease both;
+}
+:root[data-animations="on"] dialog[open]{animation:portalDialogIn .22s cubic-bezier(.2,.75,.25,1) both}
+:root[data-animations="on"] dialog[open]::backdrop{animation:portalBackdropIn .2s ease both}
+
+@keyframes portalAppEnter{
+  from{opacity:0;transform:translateY(9px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes portalViewEnter{
+  from{opacity:0;transform:translateY(10px) scale(.996)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes portalViewExit{
+  from{opacity:1;transform:translateY(0) scale(1)}
+  to{opacity:0;transform:translateY(-5px) scale(.998)}
+}
+@keyframes portalPanelReveal{
+  from{opacity:0;transform:translateY(9px) scale(.992)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes portalElementReveal{
+  from{opacity:0;transform:translateY(7px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes portalItemReveal{
+  from{opacity:0;transform:translateY(5px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes portalToastIn{
+  from{opacity:0;transform:translate(-50%,10px) scale(.98)}
+  to{opacity:1;transform:translate(-50%,0) scale(1)}
+}
+@keyframes portalToastOut{
+  from{opacity:1;transform:translate(-50%,0) scale(1)}
+  to{opacity:0;transform:translate(-50%,5px) scale(.985)}
+}
+@keyframes portalNestedReveal{
+  from{opacity:0;transform:translateX(7px)}
+  to{opacity:1;transform:translateX(0)}
+}
+@keyframes portalDialogIn{
+  from{opacity:0;transform:translateY(8px) scale(.98)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes portalBackdropIn{from{opacity:0}to{opacity:1}}
+
+@media(prefers-reduced-motion:reduce){
+  .portal-motion-boot>.wrap,
+  .view-entering,.view-leaving,.motion-reveal,
+  .view-entering .glass,.view-entering .bar,.view-entering .actions,
+  .view-entering .tabs,.view-entering .fee-card,.view-entering .row,
+  .view-entering tbody tr,.toast,.toast.toast-leaving,
+  .support-panel,.support-inbox-view,.support-thread-view,dialog[open],dialog[open]::backdrop{
+    animation:none!important;
+    transition:none!important;
+    transform:none!important;
+  }
+}
+
