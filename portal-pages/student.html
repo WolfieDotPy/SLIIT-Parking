@@ -10,9 +10,19 @@
 <section class="view hidden" id="register"><form class="glass" id="rf" onsubmit="doReg(event)"><h3 class="center">Student Registration for SLIIT Parking</h3>
 <div class="grid2"><div><label>Student Registration Number</label><input name="code" placeholder="IT26123567" maxlength="10" pattern="[A-Za-z]{2}[0-9]{8}" title="2 letters followed by 8 digits" required><div class="small" id="idmsg"></div></div><div><label>Student Full Name</label><input name="name" required></div>
 <div><label>Login Password</label><input name="password" type="password" minlength="6" required></div><div><label>Login Password Confirmation</label><input name="confirm" type="password" required><div class="pwmsg small"></div></div>
-<div><label>Student Contact Number</label><input name="contact" type="tel" inputmode="numeric" maxlength="10" minlength="10" pattern="0[0-9]{9}" title="Enter exactly 10 digits starting with 0 (e.g. 0771234567)" placeholder="0771234567" required></div><div><label>Student Vehicle Type</label><select name="vehicle_type"><option>Car</option><option>Motorcycle</option></select></div>
+<div><label>Student Personal Email</label><input name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required></div><div><label>Student Contact Number</label><input name="contact" type="tel" inputmode="numeric" maxlength="10" minlength="10" pattern="0[0-9]{9}" title="Enter exactly 10 digits starting with 0 (e.g. 0771234567)" placeholder="0771234567" required></div><div><label>Student Vehicle Type</label><select name="vehicle_type"><option>Car</option><option>Motorcycle</option></select></div>
 <div><label>Payment Slip (optional)</label><input name="slip" type="file" accept="image/*,.pdf"></div><div><label>Student Vehicle Number</label><input name="vehicle_reg" placeholder="CCC-6767" maxlength="9" required><div class="small" id="rgmsg"></div></div></div>
 <p class="small center" id="bank"></p><p class="small center">You can register now and pay later. Without a payment slip your QR code stays <b>inactive</b>.</p><button class="pill green block">Register</button><p class="center small"><a href="#" onclick="show('landing')">Back</a></p></form></section>
+
+<section class="view hidden" id="otp"><form class="glass narrow center" id="otpf" onsubmit="verifyRegOtp(event)">
+<h3>Check your email</h3><p class="sub">We sent a six-digit verification code to <b id="otpEmail"></b>.</p>
+<label class="left" for="otpCode">Verification Code</label><input id="otpCode" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" minlength="6" placeholder="000000" style="text-align:center;letter-spacing:8px;font-size:24px" required>
+<p id="otpError" class="bad small" role="alert" aria-live="polite" style="min-height:20px;margin:6px 0 12px"></p>
+<button class="pill green block" id="verifyOtpBtn">Verify Email</button>
+<p class="small center">Didn't receive it? <button type="button" class="link-button" id="resendOtpBtn" onclick="resendRegOtp()" disabled>Resend code (60s)</button></p>
+<p id="otpStatus" class="small center" aria-live="polite"></p>
+<p class="center small"><a href="#" onclick="show('register');return false">Back to registration</a></p>
+</form></section>
 
 <section class="view hidden" id="success"><div class="glass narrow center"><div style="font-size:54px" class="ok">&#10004;</div><h3>Successfully Registered!</h3><p class="small" id="smsg"></p><button class="pill" onclick="show('login')">Log in</button></div></section>
 
@@ -24,10 +34,33 @@
 
 <section class="view hidden" id="pay"><p><a href="#" onclick="home();return false">&lsaquo; Back</a></p><div class="split"><div class="glass"><h3>Unpaid fees</h3><div id="fl"></div></div><div class="glass" id="pf"></div></div></section>
 </div><script src="/common.js"></script><script>
-let ME,INFO={},PASSURL;
+let ME,INFO={},PASSURL,pendingRegistrationId=null,otpResendTimer=null;
 async function doLogin(e){e.preventDefault();try{const r=await api('/api/student/login',{method:'POST',json:{code:$('#lc').value,password:$('#lp').value}});localStorage[K]=r.token;await home()}catch(x){toast(x.message,1)}}
+function startOtpCooldown(seconds=60){
+ const button=$('#resendOtpBtn');if(!button)return;
+ clearInterval(otpResendTimer);let remaining=seconds;button.disabled=true;button.textContent='Resend code ('+remaining+'s)';
+ otpResendTimer=setInterval(()=>{remaining--;if(remaining<=0){clearInterval(otpResendTimer);otpResendTimer=null;button.disabled=false;button.textContent='Resend code'}else button.textContent='Resend code ('+remaining+'s)'},1000);
+}
 async function doReg(e){e.preventDefault();const fd=new FormData(e.target),slip=fd.get('slip')&&fd.get('slip').size>0;if(!slip)fd.delete('slip');
- try{await api('/api/student/register',{method:'POST',body:fd});e.target.reset();$('#smsg').textContent=slip?'Your pass and QR code will be active once the admin verifies your payment slip. Please log in below.':'Your QR code is inactive until you pay for a vehicle pass. Log in, then use Pay Fees > Vehicle Pass to upload your payment slip.';show('success')}catch(x){toast(x.message,1)}}
+ try{
+  const result=await api('/api/student/register/start',{method:'POST',body:fd});
+  pendingRegistrationId=result.pendingId;$('#otpEmail').textContent=result.email;$('#otpCode').value='';$('#otpError').textContent='';$('#otpStatus').textContent='';show('otp');startOtpCooldown(result.resendAfter||60);$('#otpCode').focus();
+ }catch(x){toast(x.message,1)}
+}
+async function verifyRegOtp(e){
+ e.preventDefault();const button=$('#verifyOtpBtn'),error=$('#otpError'),otp=$('#otpCode').value.trim();
+ error.textContent='';button.disabled=true;
+ try{
+  await api('/api/student/register/verify',{method:'POST',json:{pendingId:pendingRegistrationId,otp}});
+  clearInterval(otpResendTimer);otpResendTimer=null;$('#rf').reset();$('#smsg').textContent='Your email has been verified and your account has been created. You can now log in below.';show('success');
+ }catch(x){error.textContent=x.message||'Verification failed. Please try again.';$('#otpCode').focus();$('#otpCode').select();}
+ finally{button.disabled=false}
+}
+async function resendRegOtp(){
+ const button=$('#resendOtpBtn'),error=$('#otpError'),status=$('#otpStatus');button.disabled=true;error.textContent='';status.textContent='';
+ try{await api('/api/student/register/resend',{method:'POST',json:{pendingId:pendingRegistrationId}});status.textContent='A new verification code has been sent.';status.className='small center ok';startOtpCooldown(60);}
+ catch(x){error.textContent=x.message||'Could not resend the code.';button.disabled=false;button.textContent='Resend code';}
+}
 const loadImg=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src});
 function rr(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath()}
 // Draws the vehicle pass picture (header logo, QR with crest, corner brackets, VEHICLE PASS) - shown on screen and used for the download
