@@ -11,7 +11,7 @@ assert.ok(start >= 0 && end > start, 'portal view transition helpers should exis
 const transitionSource = source.slice(start, end);
 
 function createView(id, initiallyHidden = false) {
-  const classes = new Set(initiallyHidden ? ['hidden'] : []);
+  const classes = new Set(['view', ...(initiallyHidden ? ['hidden'] : [])]);
   return {
     id,
     classList: {
